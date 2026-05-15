@@ -11,5 +11,5 @@
 // ────────────────────────────────────────────────────────────────────
 
 window.APP_CONFIG = {
-  backendUrl: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE",
+  backendUrl: "https://script.google.com/macros/s/AKfycbxcj3R8MG-nDLOLipp-NpaYZfYhGcwVLoAzgoe4Kmyj9IjT4JHv6l4hIriF4BFW2kVKnQ/exec",
 };
