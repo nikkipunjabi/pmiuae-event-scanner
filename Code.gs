@@ -51,6 +51,8 @@ const COL = {
   CHECKED_IN:      19,  // S
   CHECKED_IN_TIME: 20,  // T
   PMI_ID:          21,  // U  (auto-filled via ARRAYFORMULA from ActiveMembersList)
+  FEE_AMOUNT:      22,  // V  (Number; 0 = complimentary, >0 = paid amount in AED)
+  FEE_TIME:        23,  // W  (Timestamp when fee record was made)
 };
 
 
@@ -110,7 +112,13 @@ function doPost(e) {
 
     if (action === 'checkin') {
       if (!id) return jsonResponse({ ok: false, error: 'Missing id' });
-      const result = checkInRegistrant(id, body.force === true);
+      // Optional fee fields — when recordFee is true we write the amount
+      // (which may be 0 for complimentary entries like guest speakers).
+      const feeOpts = {
+        recordFee: body.recordFee === true || body.recordFee === 'true',
+        feeAmount: body.feeAmount,
+      };
+      const result = checkInRegistrant(id, body.force === true, feeOpts);
       return jsonResponse(result);
     }
 
@@ -157,7 +165,7 @@ function readAllRows_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const values = sheet.getRange(2, 1, lastRow - 1, COL.PMI_ID).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, COL.FEE_TIME).getValues();
   // Coerce dates to ISO strings so they survive JSON round-tripping.
   const cleaned = values.map(function (r) {
     return r.map(function (v) { return v instanceof Date ? v.toISOString() : v; });
@@ -217,7 +225,17 @@ function getEventRegistrants(eventId) {
   return out;
 }
 
-function checkInRegistrant(id, force) {
+/**
+ * Check a registrant in, optionally recording a fee at the same time.
+ *
+ * @param {string} id        Registrant ID (column A)
+ * @param {boolean} force    Override even if already checked in
+ * @param {object} feeOpts   Optional. { feeAmount: number, recordFee: boolean }
+ *                           recordFee=true means write the Fee Amount + time
+ *                           regardless of whether feeAmount is 0
+ *                           (0 = complimentary; non-zero = paid amount).
+ */
+function checkInRegistrant(id, force, feeOpts) {
   const sheet = getSheet_();
   const found = findRegistrant(id);
   if (!found) return { ok: false, error: 'Registrant not found', id: id };
@@ -238,18 +256,25 @@ function checkInRegistrant(id, force) {
   const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone() || 'UTC';
   const formatted = Utilities.formatDate(now, tz, 'dd-MM-yyyy HH:mm:ss');
 
-  // Single batched write — writes both cells in one Sheets API call.
+  // Write check-in cells (S, T) in one batched call.
   sheet.getRange(found.row, COL.CHECKED_IN, 1, 2).setValues([['Yes', formatted]]);
+
+  // Optionally write the fee record (V, W). recordFee=true means we
+  // always stamp these, even for 0 (complimentary). If recordFee is
+  // not set, the fee columns are left untouched.
+  let updates = { checkedIn: 'Yes', checkedInTime: formatted };
+  if (feeOpts && feeOpts.recordFee === true) {
+    const amt = Number(feeOpts.feeAmount);
+    const safeAmt = isFinite(amt) && amt >= 0 ? amt : 0;
+    sheet.getRange(found.row, COL.FEE_AMOUNT, 1, 2).setValues([[safeAmt, formatted]]);
+    updates.feeAmount = safeAmt;
+    updates.feeTime = formatted;
+  }
 
   // Invalidate the row cache so the next read sees our write.
   invalidateRowCache_();
 
-  // Skip reading the row back — we already know what we wrote.
-  const updated = Object.assign({}, found.data, {
-    checkedIn: 'Yes',
-    checkedInTime: formatted,
-  });
-
+  const updated = Object.assign({}, found.data, updates);
   return {
     ok: true,
     overwritten: alreadyCheckedIn,
@@ -285,6 +310,8 @@ function rowToObject_(row) {
     checkedIn:       row[COL.CHECKED_IN - 1],
     checkedInTime:   row[COL.CHECKED_IN_TIME - 1],
     pmiId:           row[COL.PMI_ID - 1],
+    feeAmount:       row[COL.FEE_AMOUNT - 1],
+    feeTime:         row[COL.FEE_TIME - 1],
   };
 }
 
@@ -342,8 +369,53 @@ function onOpen() {
   SpreadsheetApp.getActive().addMenu('Event Summary', [
     { name: 'Build / Refresh Summary tab', functionName: 'buildSummaryTab' },
     null,
-    { name: 'Setup / Refresh PMI ID lookup', functionName: 'setupPmiIdLookup' },
+    { name: 'Setup / Refresh sheet columns (U, V, W)', functionName: 'setupSheetColumns' },
   ]);
+}
+
+
+/**
+ * Sets up all the auxiliary columns that our scanner depends on:
+ *   • U — PMI ID  (auto-filled via ARRAYFORMULA against ActiveMembersList)
+ *   • V — Fee Amount (AED)  (written by the scanner during check-in)
+ *   • W — Fee Collection Time  (timestamp, same)
+ *
+ * Run from the spreadsheet menu after pasting new data into Sheet1.
+ * Idempotent — safe to run multiple times.
+ */
+function setupSheetColumns() {
+  setupPmiIdLookup();         // U
+  setupFeeColumns_();         // V + W
+  SpreadsheetApp.getActive().toast(
+    'Columns U, V, W are configured.',
+    'Sheet setup',
+    6
+  );
+}
+
+function setupFeeColumns_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet1 = ss.getSheetByName(SHEET_NAME);
+  if (!sheet1) throw new Error('Could not find tab: ' + SHEET_NAME);
+
+  const feeAmountHeader = 'Fee Amount (AED)';
+  const feeTimeHeader   = 'Fee Collection Time';
+
+  const amountCell = sheet1.getRange(1, COL.FEE_AMOUNT);
+  if (String(amountCell.getValue()).trim() !== feeAmountHeader) {
+    amountCell.setValue(feeAmountHeader).setFontWeight('bold');
+  }
+  const timeCell = sheet1.getRange(1, COL.FEE_TIME);
+  if (String(timeCell.getValue()).trim() !== feeTimeHeader) {
+    timeCell.setValue(feeTimeHeader).setFontWeight('bold');
+  }
+
+  // Format the Fee Amount column as a number with two decimals so it
+  // sorts and SUMs cleanly.
+  const lastRow = Math.max(sheet1.getMaxRows(), 2);
+  sheet1.getRange(2, COL.FEE_AMOUNT, lastRow - 1, 1).setNumberFormat('#,##0.00');
+
+  invalidateRowCache_();
 }
 
 
@@ -477,12 +549,32 @@ function buildSummaryTab() {
     if (v !== '' && v != null) preservedId = v;
   }
 
-  // Wipe + recreate
+  // Wipe + recreate. Order matters: remove the filter and any bandings
+  // BEFORE attempting to merge, otherwise Sheets blocks merges with
+  // "You can't merge cells over a filtered row".
   let s = existing;
   if (s) {
+    // Remove any active filter (this is what was blocking the rebuild)
+    const f = s.getFilter();
+    if (f) f.remove();
+
+    // Remove all bandings (also can interfere with merges in some cases)
+    const bandings = s.getBandings();
+    for (let i = 0; i < bandings.length; i++) {
+      try { bandings[i].remove(); } catch (_) {}
+    }
+
+    // Break any existing merges so we can create the new ones fresh
+    try {
+      s.getRange(1, 1, s.getMaxRows(), s.getMaxColumns()).breakApart();
+    } catch (_) {}
+
     s.clear();
     s.clearConditionalFormatRules();
     s.getRange(1, 1, s.getMaxRows(), s.getMaxColumns()).clearDataValidations();
+
+    // Make sure no rows are hidden by a leftover filter view
+    try { s.showRows(1, s.getMaxRows()); } catch (_) {}
   } else {
     s = ss.insertSheet(SUMMARY_TAB_NAME);
   }
@@ -585,6 +677,28 @@ function buildSummaryTab() {
   metric_(s, row++, 'Discount Amount', '=SUMIF(' + SHEET_NAME + '!B:B, B3, ' + SHEET_NAME + '!K:K)', { numberFormat: '#,##0.00' });
   metric_(s, row++, 'Late Fee',        '=SUMIF(' + SHEET_NAME + '!B:B, B3, ' + SHEET_NAME + '!L:L)', { numberFormat: '#,##0.00' });
   metric_(s, row++, 'Net Revenue',     '=SUMIF(' + SHEET_NAME + '!B:B, B3, ' + SHEET_NAME + '!M:M)', { numberFormat: '#,##0.00', bold: true });
+  row++;
+
+  // ── FEE COLLECTION (live, from check-in writes) ─────────────────
+  // Mirrors what the scanner records: V holds the AED amount (0 means
+  // complimentary), W holds the timestamp. We count by event using
+  // column B as the filter.
+  row = section_(s, row, 'FEE COLLECTION (AT-EVENT)');
+  const rFeeTotal      = row++;
+  const rFeePaidCount  = row++;
+  const rFeeCompCount  = row++;
+  const rFeeMemberCount = row++;
+  const sn = SHEET_NAME;
+
+  metric_(s, rFeeTotal, 'Total Collected (AED)',
+    '=SUMIFS(' + sn + '!V:V, ' + sn + '!B:B, B3)',
+    { numberFormat: '#,##0.00', bold: true, color: C_VALUE_GREEN });
+  metric_(s, rFeePaidCount, 'Paid (Non-Members)',
+    '=COUNTIFS(' + sn + '!B:B, B3, ' + sn + '!V:V, ">0")');
+  metric_(s, rFeeCompCount, 'Complimentary (Guests)',
+    '=COUNTIFS(' + sn + '!B:B, B3, ' + sn + '!V:V, "=0", ' + sn + '!W:W, "<>")');
+  metric_(s, rFeeMemberCount, 'PMI Members Checked-In',
+    '=COUNTIFS(' + sn + '!B:B, B3, ' + sn + '!S:S, "Yes", ' + sn + '!U:U, "<>")');
   row++;
 
   // ── ATTENDEE LIST ────────────────────────────────────────────────

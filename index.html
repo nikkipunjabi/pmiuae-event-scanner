@@ -185,27 +185,140 @@
       text-transform: uppercase;
     }
 
-    /* PMI Member badge — shown below the email when pmiId is present */
-    .pmi-badge {
-      display: inline-flex;
+    /* ── Member status banner ────────────────────────────────────
+       Most prominent thing on the card. Front-desk staff must be able
+       to read it from across the table. */
+    .member-banner {
+      display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      margin-bottom: 14px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #0e7490 0%, #155e75 100%);
-      color: #ecfeff;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+      gap: 14px;
+      padding: 16px 18px;
+      margin: 0 0 16px;
+      border-radius: 12px;
+      font-weight: 700;
     }
-    .pmi-badge svg { width: 14px; height: 14px; flex-shrink: 0; }
-    .pmi-badge .pmi-id-num {
+    .member-banner .mb-icon {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.18);
+    }
+    .member-banner .mb-icon svg { width: 22px; height: 22px; }
+    .member-banner .mb-title {
+      font-size: 17px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1.15;
+    }
+    .member-banner .mb-sub {
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0.95;
+      letter-spacing: 0.01em;
+      margin-top: 2px;
+    }
+    .member-banner .mb-sub .mono {
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       font-weight: 700;
       letter-spacing: 0.04em;
     }
+    .member-yes {
+      background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+      color: #ffffff;
+      box-shadow: 0 2px 14px rgba(22, 101, 52, 0.35), inset 0 0 0 1px rgba(255,255,255,0.12);
+    }
+    .member-no {
+      background: linear-gradient(135deg, #b45309 0%, #9a3412 100%);
+      color: #fff7ed;
+      box-shadow: 0 2px 14px rgba(154, 52, 18, 0.35), inset 0 0 0 1px rgba(255,255,255,0.12);
+    }
+
+    /* Already-paid badge (shown if fee was previously recorded) */
+    .fee-paid-banner {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #052e16;
+      border: 1px solid #14532d;
+      color: #bbf7d0;
+      font-size: 13px;
+      margin-bottom: 14px;
+      font-weight: 500;
+    }
+    .fee-paid-banner b { font-weight: 700; }
+
+    /* ── Fee picker (non-members only) ───────────────────────────── */
+    .fee-block {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+    }
+    .fee-block .fee-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .fee-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .fee-opt {
+      display: flex; flex-direction: column;
+      align-items: stretch; justify-content: center;
+      padding: 12px 10px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.04s ease;
+      text-align: center;
+    }
+    .fee-opt:active { transform: scale(0.99); }
+    .fee-opt.selected {
+      background: var(--accent);
+      color: #001218;
+      border-color: var(--accent);
+    }
+    .fee-opt .fee-opt-sub {
+      font-size: 11px;
+      font-weight: 500;
+      opacity: 0.75;
+      margin-top: 3px;
+    }
+    .fee-custom {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      align-items: center;
+    }
+    .fee-custom label {
+      font-size: 13px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .fee-custom input {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 600;
+      outline: none;
+      text-align: right;
+    }
+    .fee-custom input:focus { border-color: var(--accent); }
+    .fee-custom .fee-aed { color: var(--muted); font-size: 13px; }
     .payment-paid     { background: #dcfce7; color: #14532d; box-shadow: inset 0 0 0 1px #4ade80; }
     .payment-unpaid   { background: #fee2e2; color: #7f1d1d; box-shadow: inset 0 0 0 1px #f87171; }
     .payment-pending  { background: #fef3c7; color: #78350f; box-shadow: inset 0 0 0 1px #fbbf24; }
@@ -462,36 +575,92 @@
         const pillClass = paymentPillClass(r.paymentStatus);
         const paymentLabel = r.paymentStatus ? escapeHtml(r.paymentStatus) : '—';
 
+        // ── Membership status ─────────────────────────────────────
+        // PMI ID coming back from the sheet means the email matched a
+        // row in ActiveMembersList. Empty / blank → non-member, and the
+        // front-desk staff will collect the AED fee.
+        const pmiIdValue = (r.pmiId == null || String(r.pmiId).trim() === '') ? '' : String(r.pmiId).trim();
+        const isMember = pmiIdValue !== '';
+
+        // Button label varies based on member status so staff sees at
+        // a glance what action they're about to take. The actual amount
+        // and mode are read from the fee picker at click time.
+        const checkInBtnInner = isMember
+          ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg> Check-In`
+          : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg> Check-In &amp; Record Fee`;
+
         const actions = opts.justCheckedIn
           ? `<button class="btn btn-ghost" id="btn-next">Scan next</button>`
           : alreadyIn
             ? `<button class="btn btn-success" id="btn-checkin" data-force="1">Re-check in anyway</button>
                <button class="btn btn-ghost" id="btn-next">Scan next</button>`
-            : `<button class="btn btn-success" id="btn-checkin">
-                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-                 Check-In
-               </button>
+            : `<button class="btn btn-success" id="btn-checkin">${checkInBtnInner}</button>
                <button class="btn btn-ghost" id="btn-cancel">Cancel</button>`;
 
-        // PMI member indicator — only rendered when the lookup returned
-        // a non-empty Personid for this registrant's email.
-        const pmiIdValue = (r.pmiId == null || String(r.pmiId).trim() === '') ? '' : String(r.pmiId).trim();
-        const pmiBadge = pmiIdValue
-          ? `<div class="pmi-badge">
-               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-               PMI Member · <span class="pmi-id-num">${escapeHtml(pmiIdValue)}</span>
+        const memberBanner = isMember
+          ? `<div class="member-banner member-yes">
+               <div class="mb-icon">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M20 6L9 17l-5-5"/></svg>
+               </div>
+               <div>
+                 <div class="mb-title">PMI Member</div>
+                 <div class="mb-sub">PMI ID: <span class="mono">${escapeHtml(pmiIdValue)}</span></div>
+               </div>
+             </div>`
+          : `<div class="member-banner member-no">
+               <div class="mb-icon">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+               </div>
+               <div>
+                 <div class="mb-title">Non-Member</div>
+                 <div class="mb-sub">Collect AED&nbsp;200 or mark as complimentary</div>
+               </div>
+             </div>`;
+
+        // ── Fee record (if one already exists from a prior scan) ────
+        const feeAmtNum = Number(r.feeAmount);
+        const feePreviouslyRecorded = (r.feeTime != null && String(r.feeTime).trim() !== '');
+        const feeAlreadyBanner = feePreviouslyRecorded
+          ? `<div class="fee-paid-banner">
+               ${feeAmtNum > 0
+                 ? `Fee already collected: <b>AED ${escapeHtml(feeAmtNum.toFixed(2))}</b> at ${escapeHtml(formatDateTime(r.feeTime))}`
+                 : `Marked <b>Complimentary</b> at ${escapeHtml(formatDateTime(r.feeTime))}`}
              </div>`
           : '';
+
+        // ── Fee picker (non-members only, only if not already recorded) ──
+        // Three quick options: 200 AED (default), complimentary, or custom.
+        const feeBlock = (!isMember && !feePreviouslyRecorded)
+          ? `<div class="fee-block">
+               <div class="fee-label">Fee collection</div>
+               <div class="fee-options">
+                 <button type="button" class="fee-opt selected" data-fee-mode="standard">
+                   AED 200
+                   <span class="fee-opt-sub">standard fee</span>
+                 </button>
+                 <button type="button" class="fee-opt" data-fee-mode="complimentary">
+                   Complimentary
+                   <span class="fee-opt-sub">guest / speaker</span>
+                 </button>
+               </div>
+               <div class="fee-custom">
+                 <label for="fee-custom-amount">Custom:</label>
+                 <input id="fee-custom-amount" type="number" inputmode="numeric" min="0" step="1" placeholder="200" />
+                 <span class="fee-aed">AED</span>
+               </div>
+             </div>`
+          : '';
+
         const pmiIdRow = pmiIdValue
           ? `<dt>PMI ID</dt><dd><strong>${escapeHtml(pmiIdValue)}</strong></dd>`
           : '';
 
         detailsCard.innerHTML = `
+          ${memberBanner}
           ${banner}
-          <h2 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Registrant</h2>
+          ${feeAlreadyBanner}
           <p class="name">${escapeHtml(fullName)}</p>
           <div class="email">${escapeHtml(r.email || '')}</div>
-          ${pmiBadge}
 
           <dl class="details">
             <dt>First Name</dt>      <dd>${escapeHtml(r.firstName || '—')}</dd>
@@ -504,8 +673,29 @@
             <dt>ID</dt>              <dd style="color:var(--muted)">${escapeHtml(r.id || '—')}</dd>
           </dl>
 
+          ${feeBlock}
+
           <div class="actions">${actions}</div>
         `;
+
+        // Wire the fee picker — three controls share a selected state
+        // tracked via data-fee-mode on the buttons + the custom input.
+        const feeButtons = detailsCard.querySelectorAll('.fee-opt');
+        const customInput = detailsCard.querySelector('#fee-custom-amount');
+        function selectFeeMode(mode) {
+          feeButtons.forEach((b) => {
+            b.classList.toggle('selected', b.dataset.feeMode === mode);
+          });
+          if (mode !== 'custom' && customInput) customInput.value = '';
+        }
+        feeButtons.forEach((btn) => {
+          btn.addEventListener('click', () => selectFeeMode(btn.dataset.feeMode));
+        });
+        if (customInput) {
+          customInput.addEventListener('input', () => {
+            if (customInput.value !== '') selectFeeMode('custom');
+          });
+        }
 
         detailsCard.classList.remove('hidden');
 
@@ -514,7 +704,11 @@
         if (checkinBtn) {
           checkinBtn.addEventListener('click', () => {
             const force = checkinBtn.dataset.force === '1';
-            checkInRegistrant(r.id, force);
+            // Read what the fee picker currently has selected (only
+            // visible for non-members on a fresh check-in). For members,
+            // or when re-check-in is happening, recordFee stays false.
+            const feeData = readFeePicker_(detailsCard, isMember, feePreviouslyRecorded);
+            checkInRegistrant(r.id, force, feeData);
           });
         }
         const cancelBtn = $('btn-cancel');
@@ -655,7 +849,38 @@
         }
       }
 
-      async function checkInRegistrant(id, force) {
+      /**
+       * Read the currently-selected option from the fee picker on the
+       * details card. Returns { recordFee, feeAmount } that the backend
+       * understands:
+       *   • recordFee=false → don't touch fee columns
+       *   • recordFee=true, feeAmount=0 → complimentary (guest/speaker)
+       *   • recordFee=true, feeAmount>0 → record that amount in AED
+       *
+       * Picker is only present for non-members on a fresh check-in, so
+       * for members or when fee was already recorded this returns
+       * { recordFee: false }.
+       */
+      function readFeePicker_(card, isMember, alreadyRecorded) {
+        if (isMember || alreadyRecorded) return { recordFee: false };
+
+        const selected = card.querySelector('.fee-opt.selected');
+        const customInput = card.querySelector('#fee-custom-amount');
+        const customRaw = customInput ? customInput.value.trim() : '';
+        const customNum = Number(customRaw);
+
+        // Custom takes priority if the user typed something valid
+        if (customRaw !== '' && isFinite(customNum) && customNum >= 0) {
+          return { recordFee: true, feeAmount: customNum };
+        }
+        if (selected && selected.dataset.feeMode === 'complimentary') {
+          return { recordFee: true, feeAmount: 0 };
+        }
+        // Default = standard AED 200
+        return { recordFee: true, feeAmount: 200 };
+      }
+
+      async function checkInRegistrant(id, force, feeData) {
         if (!requireBackend()) return;
         const btn = $('btn-checkin');
         if (btn) {
@@ -664,11 +889,16 @@
         }
 
         try {
+          const payload = { action: 'checkin', id: id, force: !!force };
+          if (feeData && feeData.recordFee) {
+            payload.recordFee = true;
+            payload.feeAmount = Number(feeData.feeAmount) || 0;
+          }
           // text/plain avoids the CORS preflight that application/json triggers.
           const data = await callBackend(BACKEND_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'checkin', id: id, force: !!force }),
+            body: JSON.stringify(payload),
           });
 
           if (data.ok) {
