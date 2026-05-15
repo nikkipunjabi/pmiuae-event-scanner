@@ -281,6 +281,7 @@
     </main>
 
     <footer>
+      <span id="cache-status" class="hidden" style="color:#22d3ee;font-weight:600">●</span>
       Built for event check-in · <code id="cfg-host">backend not configured</code>
       · <a href="#" id="test-conn" style="color:var(--accent);text-decoration:none">Test backend</a>
     </footer>
@@ -320,6 +321,19 @@
       let scanner = null;
       let scanning = false;
       let lastScanAt = 0;
+
+      // ── Local registrant cache ─────────────────────────────────────
+      //
+      // After the first successful lookup we fire a background prefetch
+      // that pulls every registrant for that event in one call. From
+      // then on, scans hit this Map and return instantly.
+      //
+      // localCache: Map<string id, registrantObject>
+      // prefetchedEventId: which event we've already prefetched (so we
+      //                    don't prefetch the same one twice)
+      const localCache = new Map();
+      let prefetchedEventId = null;
+      let prefetching = false;
 
       // ── Helpers ──
       function setStatus(html) {
@@ -533,6 +547,19 @@
         if (!id) { showError('Could not extract an ID from the scanned code.'); return; }
 
         hideDetails();
+
+        // ── Fast path: serve from local cache if we have it ─────────
+        // This is the win that makes scanning feel instant after the
+        // first lookup of the event. We still render right away; if
+        // the user then taps Check-In, the server confirms canonical
+        // state at write time.
+        const cached = localCache.get(String(id));
+        if (cached) {
+          setStatus('');
+          renderRegistrant(cached);
+          return;
+        }
+
         setStatus(`<div class="alert">Looking up ID <b>${escapeHtml(id)}</b>…</div>`);
 
         try {
@@ -546,9 +573,48 @@
             return;
           }
           setStatus('');
-          renderRegistrant(data.registrant.data || data.registrant);
+          const registrant = data.registrant.data || data.registrant;
+          // Seed the local cache with what we just fetched
+          if (registrant.id != null) localCache.set(String(registrant.id), registrant);
+          renderRegistrant(registrant);
+
+          // ── Background prefetch: once we know which event this
+          // person belongs to, slurp every registrant for that event
+          // so subsequent scans are instant. Fire-and-forget; the UI
+          // doesn't wait on it.
+          if (registrant.eventId != null
+              && String(registrant.eventId) !== String(prefetchedEventId)
+              && !prefetching) {
+            prefetchEvent(registrant.eventId);
+          }
         } catch (err) {
           showError(escapeHtml(err.message || String(err)));
+        }
+      }
+
+      async function prefetchEvent(eventId) {
+        prefetching = true;
+        try {
+          const url = `${BACKEND_URL}?action=event&id=${encodeURIComponent(eventId)}`;
+          const data = await callBackend(url, { method: 'GET' });
+          if (data.ok && Array.isArray(data.registrants)) {
+            for (const r of data.registrants) {
+              if (r && r.id != null) localCache.set(String(r.id), r);
+            }
+            prefetchedEventId = String(eventId);
+            const indicator = document.getElementById('cache-status');
+            if (indicator) {
+              indicator.classList.remove('hidden');
+              indicator.title = `${data.count} registrants pre-loaded for event ${eventId}`;
+              indicator.textContent = `● ${data.count} loaded`;
+            }
+          }
+        } catch (e) {
+          // Prefetch failures are non-fatal — we'll just fall back to
+          // per-scan lookups. Log to console for debugging.
+          console.warn('Prefetch failed:', e);
+        } finally {
+          prefetching = false;
         }
       }
 
@@ -570,11 +636,19 @@
 
           if (data.ok) {
             setStatus('');
+            // Refresh local cache so a re-scan of the same QR shows
+            // the new checked-in state without another round trip.
+            if (data.registrant && data.registrant.id != null) {
+              localCache.set(String(data.registrant.id), data.registrant);
+            }
             renderRegistrant(data.registrant, { justCheckedIn: true });
             return;
           }
 
           if (data.alreadyCheckedIn) {
+            if (data.registrant && data.registrant.id != null) {
+              localCache.set(String(data.registrant.id), data.registrant);
+            }
             showWarning(`Already checked in at <b>${escapeHtml(formatDateTime(data.previousTime))}</b>. Tap <b>Re-check in anyway</b> to override.`);
             renderRegistrant(data.registrant);
             return;
@@ -685,6 +759,15 @@
             showError(escapeHtml(err.message || String(err)));
           }
         });
+      }
+
+      // ── Pre-warm the backend ───────────────────────────────────────
+      // Apps Script Web Apps have a cold-start delay (1–3 s the first
+      // time after idle). Firing a ping on page load means the volunteer's
+      // first real scan doesn't pay that cost. Fire-and-forget.
+      if (BACKEND_URL) {
+        fetch(`${BACKEND_URL}?action=ping`, { method: 'GET', cache: 'no-store' })
+          .catch(() => { /* ignore — non-essential */ });
       }
 
       // Allow ?id=... in the page URL to trigger a lookup immediately (useful for testing).

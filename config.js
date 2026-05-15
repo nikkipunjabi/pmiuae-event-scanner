@@ -11,5 +11,5 @@
 // ────────────────────────────────────────────────────────────────────
 
 window.APP_CONFIG = {
-  backendUrl: "https://script.google.com/macros/s/AKfycbw0-4RFz0En3Q4xXawJxivztCR_o59N5pxFOsNJPaRE9YJ2xsiXnWFtg0Tb42LrOTSBag/exec",
+  backendUrl: "https://script.google.com/macros/s/AKfycbyGlCoWDCVCoejwDOp_nVfZ3xLsJks2_-Za4Yht7LTkZm-w3gtaXwPY-RST64uM6vf0WQ/exec",
 };
