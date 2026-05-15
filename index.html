@@ -629,23 +629,26 @@
           : '';
 
         // ── Fee picker (non-members only, only if not already recorded) ──
-        // Three quick options: 200 AED (default), complimentary, or custom.
+        // Two quick-pick buttons plus a custom input that ALWAYS shows
+        // the amount about to be recorded. This way the volunteer can
+        // see "200" or "0" in the field and know exactly what will be
+        // written to the sheet.
         const feeBlock = (!isMember && !feePreviouslyRecorded)
           ? `<div class="fee-block">
                <div class="fee-label">Fee collection</div>
                <div class="fee-options">
-                 <button type="button" class="fee-opt selected" data-fee-mode="standard">
+                 <button type="button" class="fee-opt selected" data-fee-mode="standard" data-fee-value="200">
                    AED 200
                    <span class="fee-opt-sub">standard fee</span>
                  </button>
-                 <button type="button" class="fee-opt" data-fee-mode="complimentary">
+                 <button type="button" class="fee-opt" data-fee-mode="complimentary" data-fee-value="0">
                    Complimentary
                    <span class="fee-opt-sub">guest / speaker</span>
                  </button>
                </div>
                <div class="fee-custom">
-                 <label for="fee-custom-amount">Custom:</label>
-                 <input id="fee-custom-amount" type="number" inputmode="numeric" min="0" step="1" placeholder="200" />
+                 <label for="fee-custom-amount">Amount:</label>
+                 <input id="fee-custom-amount" type="number" inputmode="numeric" min="0" step="1" value="200" />
                  <span class="fee-aed">AED</span>
                </div>
              </div>`
@@ -678,22 +681,36 @@
           <div class="actions">${actions}</div>
         `;
 
-        // Wire the fee picker — three controls share a selected state
-        // tracked via data-fee-mode on the buttons + the custom input.
+        // Wire the fee picker. The custom input is the single source of
+        // truth for the amount. Buttons act as quick-fills:
+        //   AED 200       → input = "200", "standard" highlighted
+        //   Complimentary → input = "0",   "complimentary" highlighted
+        //   typing manually → no preset highlighted (user is overriding)
         const feeButtons = detailsCard.querySelectorAll('.fee-opt');
         const customInput = detailsCard.querySelector('#fee-custom-amount');
-        function selectFeeMode(mode) {
+        function setFeeAmount(value, modeFromButton) {
+          if (customInput) customInput.value = String(value);
           feeButtons.forEach((b) => {
-            b.classList.toggle('selected', b.dataset.feeMode === mode);
+            b.classList.toggle('selected', b.dataset.feeMode === modeFromButton);
           });
-          if (mode !== 'custom' && customInput) customInput.value = '';
         }
         feeButtons.forEach((btn) => {
-          btn.addEventListener('click', () => selectFeeMode(btn.dataset.feeMode));
+          btn.addEventListener('click', () => {
+            setFeeAmount(btn.dataset.feeValue, btn.dataset.feeMode);
+          });
         });
         if (customInput) {
           customInput.addEventListener('input', () => {
-            if (customInput.value !== '') selectFeeMode('custom');
+            // User typed — deselect both quick buttons unless they
+            // happened to type a value matching one of them.
+            const val = customInput.value.trim();
+            let matchedMode = null;
+            feeButtons.forEach((b) => {
+              if (b.dataset.feeValue === val) matchedMode = b.dataset.feeMode;
+            });
+            feeButtons.forEach((b) => {
+              b.classList.toggle('selected', b.dataset.feeMode === matchedMode);
+            });
           });
         }
 
@@ -850,34 +867,28 @@
       }
 
       /**
-       * Read the currently-selected option from the fee picker on the
-       * details card. Returns { recordFee, feeAmount } that the backend
-       * understands:
-       *   • recordFee=false → don't touch fee columns
-       *   • recordFee=true, feeAmount=0 → complimentary (guest/speaker)
-       *   • recordFee=true, feeAmount>0 → record that amount in AED
+       * Read the fee amount to record from the picker on the card.
        *
-       * Picker is only present for non-members on a fresh check-in, so
-       * for members or when fee was already recorded this returns
-       * { recordFee: false }.
+       * The custom input is the single source of truth — buttons just
+       * fill it in. Returns { recordFee, feeAmount } for the backend:
+       *   • recordFee=false → don't touch the fee columns (members,
+       *     re-check-in of already-recorded entries)
+       *   • recordFee=true, feeAmount=0  → complimentary
+       *   • recordFee=true, feeAmount>0  → that amount in AED
        */
       function readFeePicker_(card, isMember, alreadyRecorded) {
         if (isMember || alreadyRecorded) return { recordFee: false };
 
-        const selected = card.querySelector('.fee-opt.selected');
         const customInput = card.querySelector('#fee-custom-amount');
-        const customRaw = customInput ? customInput.value.trim() : '';
-        const customNum = Number(customRaw);
+        const raw = customInput ? customInput.value.trim() : '';
+        const num = Number(raw);
 
-        // Custom takes priority if the user typed something valid
-        if (customRaw !== '' && isFinite(customNum) && customNum >= 0) {
-          return { recordFee: true, feeAmount: customNum };
+        // Empty input is treated as the default standard fee, not as 0,
+        // to prevent accidental "free" check-ins when staff clears the field.
+        if (raw === '' || !isFinite(num) || num < 0) {
+          return { recordFee: true, feeAmount: 200 };
         }
-        if (selected && selected.dataset.feeMode === 'complimentary') {
-          return { recordFee: true, feeAmount: 0 };
-        }
-        // Default = standard AED 200
-        return { recordFee: true, feeAmount: 200 };
+        return { recordFee: true, feeAmount: num };
       }
 
       async function checkInRegistrant(id, force, feeData) {
@@ -894,12 +905,17 @@
             payload.recordFee = true;
             payload.feeAmount = Number(feeData.feeAmount) || 0;
           }
+          // Debug: visible in browser DevTools so you can verify what's
+          // being sent during check-in. Especially useful when fees seem
+          // to not get recorded.
+          try { console.log('[check-in payload]', payload); } catch (_) {}
           // text/plain avoids the CORS preflight that application/json triggers.
           const data = await callBackend(BACKEND_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload),
           });
+          try { console.log('[check-in response]', data); } catch (_) {}
 
           if (data.ok) {
             setStatus('');

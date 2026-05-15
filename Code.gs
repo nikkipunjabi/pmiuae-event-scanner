@@ -92,6 +92,17 @@ function doGet(e) {
       return jsonResponse({ ok: true, message: 'pong', time: new Date().toISOString() });
     }
 
+    // Version probe — hit this URL from your browser to verify which
+    // build of the backend the deployment is actually serving. If you
+    // change Code.gs and forget to deploy a new VERSION, this stays old.
+    if (action === 'version') {
+      return jsonResponse({
+        ok: true,
+        version: 'v3-fee-support-2026-05-15',
+        features: ['lookup', 'event-bulk', 'cache', 'pmi-id', 'fee-record'],
+      });
+    }
+
     return jsonResponse({ ok: false, error: 'Unknown action: ' + action });
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err) });
@@ -330,6 +341,93 @@ function _testLookup() {
 }
 function _testCheckIn() {
   Logger.log(checkInRegistrant('6845', false));
+}
+
+
+/**
+ * Diagnose why a specific registrant's PMI lookup might be failing.
+ *
+ * Usage:
+ *   1. In the Apps Script editor, open this file
+ *   2. Change the ID inside the function below to the one that's
+ *      failing (e.g. 8426)
+ *   3. Click Run → diagnoseEmail
+ *   4. View → Logs (or Cmd+Enter / Ctrl+Enter) to see the report
+ *
+ * It logs:
+ *   • The exact email stored in Sheet1 (with hidden chars revealed)
+ *   • The exact emails in ActiveMembersList that look similar
+ *   • Whether an exact (case-insensitive, trimmed) match exists
+ *
+ * If "Exact match" is null but a fuzzy match appears, you have a typo
+ * mismatch between the two sheets — the user registered with one email
+ * but their member record uses another.
+ */
+function diagnoseEmail() {
+  const TARGET_ID = '8426';   // ← change this to the ID you want to inspect
+  _diagnoseEmail(TARGET_ID);
+}
+
+function _diagnoseEmail(id) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet1 = ss.getSheetByName(SHEET_NAME);
+  const members = ss.getSheetByName(MEMBERS_TAB_NAME);
+  if (!sheet1)  { Logger.log('Sheet1 tab not found');  return; }
+  if (!members) { Logger.log('ActiveMembersList tab not found'); return; }
+
+  invalidateRowCache_();
+  const found = findRegistrant(id);
+  if (!found) { Logger.log('Sheet1: ID ' + id + ' not found'); return; }
+
+  const sheet1Email = String(found.data.email || '');
+  const normalised  = sheet1Email.toLowerCase().trim();
+
+  Logger.log('────────────────────────────────────────');
+  Logger.log('Sheet1 row ' + found.row + ' (ID ' + id + ')');
+  Logger.log('  Email (raw)        : "' + sheet1Email + '"');
+  Logger.log('  Email (normalised) : "' + normalised + '"');
+  Logger.log('  PMI ID from formula: "' + (found.data.pmiId || '') + '"');
+  Logger.log('────────────────────────────────────────');
+
+  // Find email + PMI ID columns in ActiveMembersList
+  const memberHeaders = members.getRange(1, 1, 1, members.getLastColumn()).getValues()[0];
+  const emailColIdx = findHeader_(memberHeaders, MEMBER_EMAIL_HEADERS);
+  const pmiColIdx   = findHeader_(memberHeaders, MEMBER_PMI_ID_HEADERS);
+  if (emailColIdx === -1 || pmiColIdx === -1) {
+    Logger.log('Could not locate email/PMI columns in ' + MEMBERS_TAB_NAME);
+    return;
+  }
+  Logger.log('ActiveMembersList headers: email col = ' + (emailColIdx + 1) +
+             ', pmi col = ' + (pmiColIdx + 1));
+
+  const lastRow = members.getLastRow();
+  const memberData = members.getRange(2, 1, lastRow - 1, members.getLastColumn()).getValues();
+
+  const targetLocalPart = normalised.split('@')[0];
+  let exactMatch = null;
+  const fuzzy = [];
+
+  for (let i = 0; i < memberData.length; i++) {
+    const rawEmail = String(memberData[i][emailColIdx] || '');
+    const norm = rawEmail.toLowerCase().trim();
+    const pid  = memberData[i][pmiColIdx];
+
+    if (norm === normalised) {
+      exactMatch = { row: i + 2, email: rawEmail, pmiId: pid };
+    } else if (targetLocalPart && targetLocalPart.length > 2 && norm.split('@')[0] === targetLocalPart) {
+      fuzzy.push({ row: i + 2, email: rawEmail, pmiId: pid });
+    }
+  }
+
+  Logger.log('Exact match: ' + (exactMatch ? JSON.stringify(exactMatch) : '(none)'));
+  if (fuzzy.length > 0) {
+    Logger.log('Fuzzy matches (same local-part, different domain): ' + fuzzy.length);
+    for (let i = 0; i < Math.min(fuzzy.length, 5); i++) {
+      Logger.log('  → ' + JSON.stringify(fuzzy[i]));
+    }
+  } else {
+    Logger.log('No fuzzy matches either.');
+  }
 }
 
 
