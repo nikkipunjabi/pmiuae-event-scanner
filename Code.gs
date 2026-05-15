@@ -50,6 +50,7 @@ const COL = {
   PAYMENT_STATUS:  18,  // R
   CHECKED_IN:      19,  // S
   CHECKED_IN_TIME: 20,  // T
+  PMI_ID:          21,  // U  (auto-filled via ARRAYFORMULA from ActiveMembersList)
 };
 
 
@@ -156,7 +157,7 @@ function readAllRows_() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const values = sheet.getRange(2, 1, lastRow - 1, COL.CHECKED_IN_TIME).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, COL.PMI_ID).getValues();
   // Coerce dates to ISO strings so they survive JSON round-tripping.
   const cleaned = values.map(function (r) {
     return r.map(function (v) { return v instanceof Date ? v.toISOString() : v; });
@@ -283,6 +284,7 @@ function rowToObject_(row) {
     paymentStatus:   row[COL.PAYMENT_STATUS - 1],
     checkedIn:       row[COL.CHECKED_IN - 1],
     checkedInTime:   row[COL.CHECKED_IN_TIME - 1],
+    pmiId:           row[COL.PMI_ID - 1],
   };
 }
 
@@ -339,7 +341,125 @@ const C_HEADER_BG    = '#f1f5f9';
 function onOpen() {
   SpreadsheetApp.getActive().addMenu('Event Summary', [
     { name: 'Build / Refresh Summary tab', functionName: 'buildSummaryTab' },
+    null,
+    { name: 'Setup / Refresh PMI ID lookup', functionName: 'setupPmiIdLookup' },
   ]);
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// PMI ID lookup  — auto-fill column U in Sheet1 from ActiveMembersList
+// ════════════════════════════════════════════════════════════════════
+//
+// One ARRAYFORMULA in U2 looks up every email in Sheet1!H against the
+// ActiveMembersList tab and writes the matching Personid (PMI ID) back.
+//
+// Because it's an ARRAYFORMULA over H2:H (open-ended), it auto-extends
+// when you paste in new registrants — no script re-run needed for new
+// rows. You only need to re-run this function if:
+//   • The Sheet1 schema changes (column order, header row replaced)
+//   • The ActiveMembersList tab is renamed / restructured
+//   • You clear the entire Sheet1 (including row 2's formula)
+//
+// Run it from the spreadsheet menu: Event Summary → Setup / Refresh PMI ID lookup
+// ────────────────────────────────────────────────────────────────────
+
+const MEMBERS_TAB_NAME = 'ActiveMembersList';
+
+// Header variants we'll accept for the two columns in ActiveMembersList.
+// Case-insensitive, whitespace-trimmed.
+const MEMBER_EMAIL_HEADERS  = ['primaryemail', 'primary email', 'email', 'email address', 'e-mail'];
+const MEMBER_PMI_ID_HEADERS = ['personid', 'person id', 'pmi id', 'pmiid', 'pmi_id', 'member id', 'membership id'];
+
+function setupPmiIdLookup() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet1  = ss.getSheetByName(SHEET_NAME);
+  const members = ss.getSheetByName(MEMBERS_TAB_NAME);
+
+  if (!sheet1)  throw new Error('Could not find tab: ' + SHEET_NAME);
+  if (!members) throw new Error('Could not find tab: ' + MEMBERS_TAB_NAME +
+                                ' — make sure the name matches exactly.');
+
+  // Detect email + Personid columns in ActiveMembersList by header
+  const headers = members.getRange(1, 1, 1, members.getLastColumn()).getValues()[0];
+  const emailColIdx = findHeader_(headers, MEMBER_EMAIL_HEADERS);
+  const pmiColIdx   = findHeader_(headers, MEMBER_PMI_ID_HEADERS);
+
+  if (emailColIdx === -1) {
+    throw new Error('Could not find email column in ' + MEMBERS_TAB_NAME +
+                    '. Looked for: ' + MEMBER_EMAIL_HEADERS.join(', '));
+  }
+  if (pmiColIdx === -1) {
+    throw new Error('Could not find PMI ID column in ' + MEMBERS_TAB_NAME +
+                    '. Looked for: ' + MEMBER_PMI_ID_HEADERS.join(', '));
+  }
+
+  const emailColLetter = colToLetter_(emailColIdx + 1);
+  const pmiColLetter   = colToLetter_(pmiColIdx + 1);
+  const pmiIdHeader    = 'PMI ID';
+
+  // Make sure column U in Sheet1 has the right header.
+  const headerCell = sheet1.getRange(1, COL.PMI_ID);
+  if (String(headerCell.getValue()).trim() !== pmiIdHeader) {
+    headerCell.setValue(pmiIdHeader).setFontWeight('bold');
+  }
+
+  // Build the ARRAYFORMULA. It:
+  //   • Skips rows where the email cell is blank
+  //   • Lower-cases + trims both sides for robust matching
+  //   • Returns "" instead of #N/A when there's no match
+  //
+  // The {LOWER(TRIM(emails)), pmiIds} construct creates a virtual
+  // 2-column lookup table that VLOOKUP can scan in one pass.
+  const formula =
+    '=ARRAYFORMULA(' +
+      'IF(TRIM(H2:H)="","",' +
+        'IFERROR(' +
+          'VLOOKUP(' +
+            'LOWER(TRIM(H2:H)),' +
+            '{LOWER(TRIM(' + MEMBERS_TAB_NAME + '!' + emailColLetter + '2:' + emailColLetter + ')),' +
+              MEMBERS_TAB_NAME + '!' + pmiColLetter + '2:' + pmiColLetter + '},' +
+            '2,FALSE' +
+          '),' +
+        '""' +
+        ')' +
+      ')' +
+    ')';
+
+  // Clear any pre-existing data in U2:U so the ARRAYFORMULA can spill
+  // freely, then write the formula.
+  const lastRow = Math.max(sheet1.getMaxRows(), 2);
+  sheet1.getRange(2, COL.PMI_ID, lastRow - 1, 1).clearContent();
+  sheet1.getRange(2, COL.PMI_ID).setFormula(formula);
+
+  // Invalidate the cached registrant data so the next scanner lookup
+  // picks up the freshly-filled PMI IDs.
+  invalidateRowCache_();
+
+  SpreadsheetApp.getActive().toast(
+    'PMI ID lookup set up. Column U auto-fills from ' + MEMBERS_TAB_NAME +
+      ' (' + emailColLetter + '↔' + pmiColLetter + ').',
+    'PMI ID',
+    8
+  );
+}
+
+function findHeader_(headerRow, candidates) {
+  for (let i = 0; i < headerRow.length; i++) {
+    const normalised = String(headerRow[i] || '').toLowerCase().trim();
+    if (candidates.indexOf(normalised) !== -1) return i;
+  }
+  return -1;
+}
+
+function colToLetter_(col) {
+  let letter = '';
+  while (col > 0) {
+    const mod = (col - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    col = Math.floor((col - 1) / 26);
+  }
+  return letter;
 }
 
 
@@ -368,15 +488,19 @@ function buildSummaryTab() {
   }
   s.setHiddenGridlines(true);
 
-  // Column widths
-  s.setColumnWidth(1, 180);
-  s.setColumnWidth(2, 160);
-  s.setColumnWidth(3, 110);
-  s.setColumnWidth(4, 200);
-  s.setColumnWidth(5, 240);
-  s.setColumnWidth(6, 130);
-  s.setColumnWidth(7, 130);
-  s.setColumnWidth(8, 170);
+  // Column widths — chosen to fit both blocks:
+  //   • Metric block uses A (labels like "Not Yet Checked In") and B (values)
+  //   • Attendee list uses A–H (ID, First, Last, Email, Reg Date, Payment, Checked In, Time)
+  // Column A is generously sized for the longest metric label; IDs get
+  // some right-side whitespace which is fine because they're left-aligned.
+  s.setColumnWidth(1, 180); // ID / metric labels
+  s.setColumnWidth(2, 140); // First Name / metric values
+  s.setColumnWidth(3, 180); // Last Name / payment %
+  s.setColumnWidth(4, 260); // Email
+  s.setColumnWidth(5, 180); // Registration Date
+  s.setColumnWidth(6, 140); // Payment Status
+  s.setColumnWidth(7, 110); // Checked In
+  s.setColumnWidth(8, 180); // Check-In Time
 
   // ── Title row ────────────────────────────────────────────────────
   s.getRange('A1:H1').merge()
@@ -464,7 +588,20 @@ function buildSummaryTab() {
   row++;
 
   // ── ATTENDEE LIST ────────────────────────────────────────────────
-  row = section_(s, row, 'ATTENDEE LIST');
+  // Custom section header with a live registrant count, e.g.
+  // "ATTENDEE LIST (481 registrants)". We can't use section_() here
+  // because that helper takes a static label.
+  s.getRange(row, 1, 1, 8).merge()
+    .setFormula('=CONCATENATE("ATTENDEE LIST (", COUNTIF(' + SHEET_NAME + '!B:B, B3), " registrants)")')
+    .setFontWeight('bold')
+    .setFontColor(C_SECTION_FG)
+    .setBackground(C_SECTION_BG)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle')
+    .setFontSize(11);
+  s.setRowHeight(row, 28);
+  row += 1;
+
   const Q = "'";  // single-quote helper for QUERY label syntax
   const attendeeFormula =
     '=IFERROR(' +
@@ -483,40 +620,91 @@ function buildSummaryTab() {
     '"No registrants for this event yet.")';
   s.getRange('A' + row).setFormula(attendeeFormula);
 
-  // Style the header row that QUERY spills out.
+  // Header row that QUERY spills into — make it dark and bold so it
+  // visually anchors the table.
   const headerRow = row;
   s.getRange(headerRow, 1, 1, 8)
     .setFontWeight('bold')
-    .setBackground(C_HEADER_BG)
-    .setBorder(true, true, true, true, false, false, C_BORDER, SpreadsheetApp.BorderStyle.SOLID);
+    .setFontColor('#ffffff')
+    .setBackground('#0f172a')
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle')
+    .setBorder(true, true, true, true, false, false, '#0f172a', SpreadsheetApp.BorderStyle.SOLID);
+  s.setRowHeight(headerRow, 32);
 
-  // Conditional formatting on the attendee list
-  const tableRange   = s.getRange(headerRow + 1, 7, 1000, 1); // column G = "Checked In"
-  const paymentRange = s.getRange(headerRow + 1, 6, 1000, 1); // column F = "Payment Status"
+  // ── Data-area styling ───────────────────────────────────────────
+  // The QUERY spills an unknown number of rows. We style a generous
+  // window (1000 rows) so the formatting is in place regardless of
+  // event size. Empty rows just won't render the banding/border colors.
+  const dataStartRow = headerRow + 1;
+  const dataWindow   = 1000;
+  const dataArea     = s.getRange(dataStartRow, 1, dataWindow, 8);
+
+  dataArea
+    .setVerticalAlignment('middle')
+    .setHorizontalAlignment('left')
+    .setFontSize(10);
+
+  // Bigger row heights for the first chunk of data rows
+  for (let i = 0; i < 200; i++) {
+    s.setRowHeight(dataStartRow + i, 28);
+  }
+
+  // ── Conditional formatting ──────────────────────────────────────
+  // Status columns
+  const checkedInRange = s.getRange(dataStartRow, 7, dataWindow, 1); // col G
+  const paymentRange   = s.getRange(dataStartRow, 6, dataWindow, 1); // col F
+  // Whole data area (for row banding)
+  const bandingRef = '$A' + dataStartRow;
+  const bandingRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=AND(MOD(ROW(),2)=0, ' + bandingRef + '<>"")')
+    .setBackground('#f8fafc')
+    .setRanges([dataArea])
+    .build();
+
+  // Build the full rules array (banding goes first so status colors
+  // override the gray on those cells).
   const rules = s.getConditionalFormatRules();
+  rules.push(bandingRule);
   rules.push(
     SpreadsheetApp.newConditionalFormatRule()
-      .whenTextEqualTo('Yes').setBackground('#dcfce7').setFontColor('#14532d')
-      .setRanges([tableRange]).build()
+      .whenTextEqualTo('Yes')
+      .setBackground('#dcfce7').setFontColor('#14532d').setBold(true)
+      .setRanges([checkedInRange]).build()
   );
   rules.push(
     SpreadsheetApp.newConditionalFormatRule()
-      .whenTextEqualTo('No').setBackground('#fee2e2').setFontColor('#7f1d1d')
-      .setRanges([tableRange]).build()
+      .whenTextEqualTo('No')
+      .setBackground('#fee2e2').setFontColor('#7f1d1d')
+      .setRanges([checkedInRange]).build()
   );
   rules.push(
     SpreadsheetApp.newConditionalFormatRule()
-      .whenTextEqualTo('Paid').setBackground('#dcfce7').setFontColor('#14532d').setBold(true)
+      .whenTextEqualTo('Paid')
+      .setBackground('#dcfce7').setFontColor('#14532d').setBold(true)
       .setRanges([paymentRange]).build()
   );
   rules.push(
     SpreadsheetApp.newConditionalFormatRule()
-      .whenTextEqualTo('Unpaid').setBackground('#fee2e2').setFontColor('#7f1d1d').setBold(true)
+      .whenTextEqualTo('Unpaid')
+      .setBackground('#fee2e2').setFontColor('#7f1d1d').setBold(true)
+      .setRanges([paymentRange]).build()
+  );
+  rules.push(
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo('Waiting List')
+      .setBackground('#fef3c7').setFontColor('#78350f').setBold(true)
+      .setRanges([paymentRange]).build()
+  );
+  rules.push(
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo('Pending')
+      .setBackground('#dbeafe').setFontColor('#1e3a8a').setBold(true)
       .setRanges([paymentRange]).build()
   );
   s.setConditionalFormatRules(rules);
 
-  // Freeze the area above the attendee list so it stays visible while scrolling.
+  // Freeze the table header so column titles stay visible while scrolling
   s.setFrozenRows(headerRow);
 
   // Tidy alignment on the metric block

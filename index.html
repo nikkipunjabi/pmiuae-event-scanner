@@ -184,6 +184,28 @@
       letter-spacing: 0.02em;
       text-transform: uppercase;
     }
+
+    /* PMI Member badge — shown below the email when pmiId is present */
+    .pmi-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0e7490 0%, #155e75 100%);
+      color: #ecfeff;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+    }
+    .pmi-badge svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .pmi-badge .pmi-id-num {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
     .payment-paid     { background: #dcfce7; color: #14532d; box-shadow: inset 0 0 0 1px #4ade80; }
     .payment-unpaid   { background: #fee2e2; color: #7f1d1d; box-shadow: inset 0 0 0 1px #f87171; }
     .payment-pending  { background: #fef3c7; color: #78350f; box-shadow: inset 0 0 0 1px #fbbf24; }
@@ -451,11 +473,25 @@
                </button>
                <button class="btn btn-ghost" id="btn-cancel">Cancel</button>`;
 
+        // PMI member indicator — only rendered when the lookup returned
+        // a non-empty Personid for this registrant's email.
+        const pmiIdValue = (r.pmiId == null || String(r.pmiId).trim() === '') ? '' : String(r.pmiId).trim();
+        const pmiBadge = pmiIdValue
+          ? `<div class="pmi-badge">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+               PMI Member · <span class="pmi-id-num">${escapeHtml(pmiIdValue)}</span>
+             </div>`
+          : '';
+        const pmiIdRow = pmiIdValue
+          ? `<dt>PMI ID</dt><dd><strong>${escapeHtml(pmiIdValue)}</strong></dd>`
+          : '';
+
         detailsCard.innerHTML = `
           ${banner}
           <h2 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Registrant</h2>
           <p class="name">${escapeHtml(fullName)}</p>
           <div class="email">${escapeHtml(r.email || '')}</div>
+          ${pmiBadge}
 
           <dl class="details">
             <dt>First Name</dt>      <dd>${escapeHtml(r.firstName || '—')}</dd>
@@ -464,6 +500,7 @@
             <dt>Registration Date</dt><dd>${escapeHtml(formatDateTime(r.registrationDate))}</dd>
             <dt>Payment Date</dt>    <dd>${escapeHtml(formatDateTime(r.paymentDate))}</dd>
             <dt>Payment Status</dt>  <dd><span class="payment-pill ${pillClass}">${paymentLabel}</span></dd>
+            ${pmiIdRow}
             <dt>ID</dt>              <dd style="color:var(--muted)">${escapeHtml(r.id || '—')}</dd>
           </dl>
 
