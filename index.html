@@ -282,6 +282,7 @@
 
     <footer>
       Built for event check-in · <code id="cfg-host">backend not configured</code>
+      · <a href="#" id="test-conn" style="color:var(--accent);text-decoration:none">Test backend</a>
     </footer>
   </div>
 
@@ -486,6 +487,46 @@
         return true;
       }
 
+      /**
+       * Wrapper around fetch() that gives meaningful diagnostics when the
+       * backend isn't behaving — instead of the opaque "Load failed".
+       *
+       * Cases it surfaces explicitly:
+       *  - Apps Script returned an HTML page (deployment access is wrong)
+       *  - Apps Script returned non-2xx
+       *  - Body wasn't JSON
+       *  - Underlying fetch threw (CORS / offline / DNS / etc.)
+       */
+      async function callBackend(url, init) {
+        let res;
+        try {
+          res = await fetch(url, Object.assign({ redirect: 'follow', cache: 'no-store' }, init || {}));
+        } catch (err) {
+          const hint = (err && err.message && /Load failed|Failed to fetch|NetworkError/i.test(err.message))
+            ? ' (This usually means CORS or the device is offline. Open the backend URL directly in a browser tab to verify it returns JSON.)'
+            : '';
+          throw new Error('Could not reach backend: ' + (err && err.message ? err.message : String(err)) + hint);
+        }
+
+        const ct = res.headers.get('content-type') || '';
+        const text = await res.text();
+
+        if (!res.ok) {
+          throw new Error('Backend returned HTTP ' + res.status + (text ? ' — ' + text.slice(0, 200) : ''));
+        }
+
+        // Apps Script returns HTML when "Who has access" isn't set to "Anyone".
+        if (ct.includes('text/html') || /<\!doctype html|<html/i.test(text)) {
+          throw new Error('Backend returned an HTML page instead of JSON. Open Apps Script → Deploy → Manage deployments → set "Who has access" to "Anyone", then redeploy.');
+        }
+
+        try {
+          return JSON.parse(text);
+        } catch (_) {
+          throw new Error('Backend response was not JSON: ' + text.slice(0, 200));
+        }
+      }
+
       async function lookupRegistrant(rawScan) {
         if (!requireBackend()) return;
         const id = extractIdFromScan(rawScan);
@@ -496,8 +537,7 @@
 
         try {
           const url = `${BACKEND_URL}?action=lookup&id=${encodeURIComponent(id)}`;
-          const res = await fetch(url, { method: 'GET' });
-          const data = await res.json();
+          const data = await callBackend(url, { method: 'GET' });
 
           if (!data.ok) {
             showError(data.error === 'Registrant not found'
@@ -508,7 +548,7 @@
           setStatus('');
           renderRegistrant(data.registrant.data || data.registrant);
         } catch (err) {
-          showError(`Network error: ${escapeHtml(err.message || String(err))}`);
+          showError(escapeHtml(err.message || String(err)));
         }
       }
 
@@ -521,13 +561,12 @@
         }
 
         try {
-          // Use text/plain to avoid CORS preflight on Apps Script Web Apps.
-          const res = await fetch(BACKEND_URL, {
+          // text/plain avoids the CORS preflight that application/json triggers.
+          const data = await callBackend(BACKEND_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({ action: 'checkin', id: id, force: !!force }),
           });
-          const data = await res.json();
 
           if (data.ok) {
             setStatus('');
@@ -544,7 +583,7 @@
           showError(escapeHtml(data.error || 'Check-in failed.'));
           if (btn) { btn.disabled = false; btn.innerHTML = 'Check-In'; }
         } catch (err) {
-          showError(`Network error: ${escapeHtml(err.message || String(err))}`);
+          showError(escapeHtml(err.message || String(err)));
           if (btn) { btn.disabled = false; btn.innerHTML = 'Check-In'; }
         }
       }
@@ -627,6 +666,26 @@
       manualInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') btnManual.click();
       });
+
+      // "Test backend" — pings the Apps Script with ?action=ping
+      const testBtn = $('test-conn');
+      if (testBtn) {
+        testBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          if (!requireBackend()) return;
+          setStatus(`<div class="alert">Testing backend…</div>`);
+          try {
+            const data = await callBackend(`${BACKEND_URL}?action=ping`, { method: 'GET' });
+            if (data.ok) {
+              showSuccess(`Backend reachable. Server time: <b>${escapeHtml(data.time || '?')}</b>`);
+            } else {
+              showError(escapeHtml(data.error || 'Backend returned ok=false'));
+            }
+          } catch (err) {
+            showError(escapeHtml(err.message || String(err)));
+          }
+        });
+      }
 
       // Allow ?id=... in the page URL to trigger a lookup immediately (useful for testing).
       const pageParams = new URLSearchParams(window.location.search);
