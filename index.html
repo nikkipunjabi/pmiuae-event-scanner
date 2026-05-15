@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Event Check-In</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%E2%9C%93%3C/text%3E%3C/svg%3E" />
+
+  <!-- QR scanner: html5-qrcode (Apache-2.0) loaded from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #0b1220;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --border: #334155;
+      --accent: #22d3ee;
+      --accent-hover: #06b6d4;
+      --success: #16a34a;
+      --success-bg: #052e16;
+      --warning: #f59e0b;
+      --warning-bg: #422006;
+      --danger: #ef4444;
+      --danger-bg: #450a0a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+    .app {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 18px 4px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+    }
+    .subtitle { color: var(--muted); font-size: 13px; }
+
+    main { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+
+    /* Scanner */
+    #reader {
+      width: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+    }
+    #reader video { width: 100% !important; height: auto !important; display: block; }
+
+    .scanner-empty {
+      text-align: center;
+      padding: 28px 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .scanner-empty svg { width: 44px; height: 44px; opacity: 0.6; margin-bottom: 10px; }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 18px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.05s ease;
+    }
+    .btn:active { transform: scale(0.99); }
+    .btn-primary { background: var(--accent); color: #001218; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success { background: var(--success); color: #ecfdf5; }
+    .btn-success:hover { background: #15803d; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-ghost:hover { background: var(--panel-2); }
+    .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+    .btn-row { display: flex; gap: 10px; }
+    .btn-row .btn { flex: 1; }
+
+    /* Manual entry */
+    .manual {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .manual input {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+    }
+    .manual input:focus { border-color: var(--accent); }
+    .manual button { padding: 12px 16px; }
+
+    /* Status messages */
+    .alert {
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .alert-error   { background: var(--danger-bg);  border-color: #7f1d1d; color: #fecaca; }
+    .alert-warning { background: var(--warning-bg); border-color: #78350f; color: #fde68a; }
+    .alert-success { background: var(--success-bg); border-color: #14532d; color: #bbf7d0; }
+    .alert b { font-weight: 600; }
+
+    /* Registrant details */
+    .name {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .email {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 14px;
+      word-break: break-all;
+    }
+    dl.details {
+      margin: 0;
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      column-gap: 16px;
+      row-gap: 8px;
+      font-size: 14px;
+    }
+    dl.details dt { color: var(--muted); }
+    dl.details dd { margin: 0; color: var(--text); }
+
+    /* Payment status — bold + highlighted (per spec) */
+    .payment-pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .payment-paid     { background: #dcfce7; color: #14532d; box-shadow: inset 0 0 0 1px #4ade80; }
+    .payment-unpaid   { background: #fee2e2; color: #7f1d1d; box-shadow: inset 0 0 0 1px #f87171; }
+    .payment-pending  { background: #fef3c7; color: #78350f; box-shadow: inset 0 0 0 1px #fbbf24; }
+    .payment-other    { background: #e0e7ff; color: #312e81; box-shadow: inset 0 0 0 1px #818cf8; }
+
+    .actions { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+
+    .check-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--success-bg);
+      border: 1px solid #14532d;
+      color: #bbf7d0;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .check-banner svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    /* Loader */
+    .loader {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 14px 0 22px;
+    }
+    footer code {
+      background: var(--panel-2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Event Check-In</h1>
+        <div class="subtitle">Scan a registrant's QR code</div>
+      </div>
+    </header>
+
+    <main>
+      <!-- ─── SCANNER CARD ─── -->
+      <section class="card" id="scanner-card">
+        <h2>Scanner</h2>
+
+        <div id="reader-wrap">
+          <div id="reader"></div>
+          <div id="scanner-empty" class="scanner-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 19h3"/>
+            </svg>
+            <div>Tap <b>Start Scanner</b> to use the camera</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="btn-start" class="btn btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Start Scanner
+          </button>
+          <button id="btn-stop" class="btn btn-ghost hidden">Stop Scanner</button>
+        </div>
+
+        <div class="manual">
+          <input id="manual-id" inputmode="text" placeholder="Or enter ID manually (e.g. 6845)" />
+          <button id="btn-manual" class="btn btn-ghost">Look up</button>
+        </div>
+      </section>
+
+      <!-- ─── STATUS AREA ─── -->
+      <div id="status-area"></div>
+
+      <!-- ─── REGISTRANT DETAILS ─── -->
+      <section class="card hidden" id="details-card" aria-live="polite"></section>
+    </main>
+
+    <footer>
+      Built for event check-in · <code id="cfg-host">backend not configured</code>
+    </footer>
+  </div>
+
+  <!-- Frontend config (Apps Script Web App URL goes here) -->
+  <script src="./config.js"></script>
+
+  <script>
+    // ════════════════════════════════════════════════════════════════
+    //  Event Check-In  — frontend logic
+    // ════════════════════════════════════════════════════════════════
+    (function () {
+      'use strict';
+
+      const cfg = window.APP_CONFIG || {};
+      const BACKEND_URL = cfg.backendUrl || '';
+
+      // Surface the configured host in the footer for quick sanity-check.
+      const hostEl = document.getElementById('cfg-host');
+      if (BACKEND_URL) {
+        try { hostEl.textContent = new URL(BACKEND_URL).host; }
+        catch { hostEl.textContent = 'backend configured'; }
+      }
+
+      // ── DOM refs ──
+      const $ = (id) => document.getElementById(id);
+      const readerEl     = $('reader');
+      const readerEmpty  = $('scanner-empty');
+      const btnStart     = $('btn-start');
+      const btnStop      = $('btn-stop');
+      const btnManual    = $('btn-manual');
+      const manualInput  = $('manual-id');
+      const statusArea   = $('status-area');
+      const detailsCard  = $('details-card');
+
+      let scanner = null;
+      let scanning = false;
+      let lastScanAt = 0;
+
+      // ── Helpers ──
+      function setStatus(html) {
+        statusArea.innerHTML = html || '';
+      }
+
+      function showError(msg) {
+        setStatus(`<div class="alert alert-error">⚠️ <div>${msg}</div></div>`);
+      }
+
+      function showWarning(msg) {
+        setStatus(`<div class="alert alert-warning">⚠️ <div>${msg}</div></div>`);
+      }
+
+      function showSuccess(msg) {
+        setStatus(`<div class="alert alert-success">✓ <div>${msg}</div></div>`);
+      }
+
+      function hideDetails() {
+        detailsCard.classList.add('hidden');
+        detailsCard.innerHTML = '';
+      }
+
+      /**
+       * Extract a registrant ID from whatever the QR code contained.
+       * Supports:
+       *   1. URLs with `?id=…` query (the format you shared)
+       *   2. URLs with `id` inside the fragment
+       *   3. Raw numeric / alphanumeric IDs
+       */
+      function extractIdFromScan(text) {
+        if (!text) return null;
+        const trimmed = String(text).trim();
+
+        // Try parsing as URL first
+        try {
+          const u = new URL(trimmed);
+          const fromQuery = u.searchParams.get('id');
+          if (fromQuery) return fromQuery;
+
+          // Some systems put params in the hash
+          if (u.hash && u.hash.includes('=')) {
+            const hashParams = new URLSearchParams(u.hash.replace(/^#/, ''));
+            const fromHash = hashParams.get('id');
+            if (fromHash) return fromHash;
+          }
+        } catch (_) {
+          /* not a URL — fall through */
+        }
+
+        // Pull `id=<value>` out of any string as a fallback
+        const m = trimmed.match(/[?&;]id=([^&;\s]+)/i);
+        if (m) return decodeURIComponent(m[1]);
+
+        // Otherwise treat the whole text as an ID
+        return trimmed;
+      }
+
+      function formatDateTime(value) {
+        if (!value) return '—';
+        if (typeof value === 'string') return value;
+        try {
+          const d = new Date(value);
+          if (isNaN(d.getTime())) return String(value);
+          const pad = (n) => String(n).padStart(2, '0');
+          return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        } catch {
+          return String(value);
+        }
+      }
+
+      function paymentPillClass(status) {
+        const s = String(status || '').toLowerCase().trim();
+        if (s === 'paid')    return 'payment-paid';
+        if (s === 'unpaid' || s === 'failed' || s === 'cancelled') return 'payment-unpaid';
+        if (s === 'pending' || s === 'awaiting') return 'payment-pending';
+        return 'payment-other';
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      }
+
+      // ── Renderer ──
+      function renderRegistrant(r, opts) {
+        opts = opts || {};
+        const fullName = [r.firstName, r.lastName].filter(Boolean).join(' ') || '(no name)';
+        const alreadyIn = String(r.checkedIn || '').trim().toLowerCase() === 'yes';
+
+        const banner = (opts.justCheckedIn)
+          ? `<div class="check-banner">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+               Checked in at ${escapeHtml(formatDateTime(r.checkedInTime))}
+             </div>`
+          : (alreadyIn && !opts.justCheckedIn)
+            ? `<div class="check-banner" style="background:#422006;border-color:#78350f;color:#fde68a">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                 Already checked in at ${escapeHtml(formatDateTime(r.checkedInTime))}
+               </div>`
+            : '';
+
+        const pillClass = paymentPillClass(r.paymentStatus);
+        const paymentLabel = r.paymentStatus ? escapeHtml(r.paymentStatus) : '—';
+
+        const actions = opts.justCheckedIn
+          ? `<button class="btn btn-ghost" id="btn-next">Scan next</button>`
+          : alreadyIn
+            ? `<button class="btn btn-success" id="btn-checkin" data-force="1">Re-check in anyway</button>
+               <button class="btn btn-ghost" id="btn-next">Scan next</button>`
+            : `<button class="btn btn-success" id="btn-checkin">
+                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                 Check-In
+               </button>
+               <button class="btn btn-ghost" id="btn-cancel">Cancel</button>`;
+
+        detailsCard.innerHTML = `
+          ${banner}
+          <h2 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Registrant</h2>
+          <p class="name">${escapeHtml(fullName)}</p>
+          <div class="email">${escapeHtml(r.email || '')}</div>
+
+          <dl class="details">
+            <dt>First Name</dt>      <dd>${escapeHtml(r.firstName || '—')}</dd>
+            <dt>Last Name</dt>       <dd>${escapeHtml(r.lastName || '—')}</dd>
+            <dt>Email</dt>           <dd>${escapeHtml(r.email || '—')}</dd>
+            <dt>Registration Date</dt><dd>${escapeHtml(formatDateTime(r.registrationDate))}</dd>
+            <dt>Payment Date</dt>    <dd>${escapeHtml(formatDateTime(r.paymentDate))}</dd>
+            <dt>Payment Status</dt>  <dd><span class="payment-pill ${pillClass}">${paymentLabel}</span></dd>
+            <dt>ID</dt>              <dd style="color:var(--muted)">${escapeHtml(r.id || '—')}</dd>
+          </dl>
+
+          <div class="actions">${actions}</div>
+        `;
+
+        detailsCard.classList.remove('hidden');
+
+        // Wire buttons
+        const checkinBtn = $('btn-checkin');
+        if (checkinBtn) {
+          checkinBtn.addEventListener('click', () => {
+            const force = checkinBtn.dataset.force === '1';
+            checkInRegistrant(r.id, force);
+          });
+        }
+        const cancelBtn = $('btn-cancel');
+        if (cancelBtn) cancelBtn.addEventListener('click', resetView);
+        const nextBtn = $('btn-next');
+        if (nextBtn) nextBtn.addEventListener('click', resetView);
+      }
+
+      function resetView() {
+        hideDetails();
+        setStatus('');
+        manualInput.value = '';
+      }
+
+      // ── Backend ──
+      function requireBackend() {
+        if (!BACKEND_URL) {
+          showError('Backend URL not configured. Edit <code>config.js</code> and set <b>backendUrl</b> to your deployed Apps Script <code>/exec</code> URL.');
+          return false;
+        }
+        return true;
+      }
+
+      async function lookupRegistrant(rawScan) {
+        if (!requireBackend()) return;
+        const id = extractIdFromScan(rawScan);
+        if (!id) { showError('Could not extract an ID from the scanned code.'); return; }
+
+        hideDetails();
+        setStatus(`<div class="alert">Looking up ID <b>${escapeHtml(id)}</b>…</div>`);
+
+        try {
+          const url = `${BACKEND_URL}?action=lookup&id=${encodeURIComponent(id)}`;
+          const res = await fetch(url, { method: 'GET' });
+          const data = await res.json();
+
+          if (!data.ok) {
+            showError(data.error === 'Registrant not found'
+              ? `No registrant found for ID <b>${escapeHtml(id)}</b>.`
+              : escapeHtml(data.error || 'Lookup failed.'));
+            return;
+          }
+          setStatus('');
+          renderRegistrant(data.registrant.data || data.registrant);
+        } catch (err) {
+          showError(`Network error: ${escapeHtml(err.message || String(err))}`);
+        }
+      }
+
+      async function checkInRegistrant(id, force) {
+        if (!requireBackend()) return;
+        const btn = $('btn-checkin');
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<span class="loader"></span> Checking in…';
+        }
+
+        try {
+          // Use text/plain to avoid CORS preflight on Apps Script Web Apps.
+          const res = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'checkin', id: id, force: !!force }),
+          });
+          const data = await res.json();
+
+          if (data.ok) {
+            setStatus('');
+            renderRegistrant(data.registrant, { justCheckedIn: true });
+            return;
+          }
+
+          if (data.alreadyCheckedIn) {
+            showWarning(`Already checked in at <b>${escapeHtml(formatDateTime(data.previousTime))}</b>. Tap <b>Re-check in anyway</b> to override.`);
+            renderRegistrant(data.registrant);
+            return;
+          }
+
+          showError(escapeHtml(data.error || 'Check-in failed.'));
+          if (btn) { btn.disabled = false; btn.innerHTML = 'Check-In'; }
+        } catch (err) {
+          showError(`Network error: ${escapeHtml(err.message || String(err))}`);
+          if (btn) { btn.disabled = false; btn.innerHTML = 'Check-In'; }
+        }
+      }
+
+      // ── Scanner ──
+      function onScanSuccess(decodedText) {
+        // Debounce: html5-qrcode fires repeatedly while a code stays in frame.
+        const now = Date.now();
+        if (now - lastScanAt < 2000) return;
+        lastScanAt = now;
+
+        stopScanner();
+        lookupRegistrant(decodedText);
+      }
+
+      function onScanError(_msg) {
+        // Suppress per-frame "not found" errors; they're expected.
+      }
+
+      async function startScanner() {
+        if (scanning) return;
+        if (!window.Html5Qrcode) {
+          showError('Scanner library failed to load. Check your internet connection and refresh.');
+          return;
+        }
+
+        readerEmpty.classList.add('hidden');
+        btnStart.classList.add('hidden');
+        btnStop.classList.remove('hidden');
+        setStatus('');
+        hideDetails();
+
+        scanner = scanner || new Html5Qrcode('reader');
+        const config = {
+          fps: 10,
+          qrbox: (vw, vh) => {
+            const m = Math.min(vw, vh);
+            const s = Math.floor(m * 0.7);
+            return { width: s, height: s };
+          },
+          aspectRatio: 1.0,
+          rememberLastUsedCamera: true,
+        };
+
+        try {
+          await scanner.start(
+            { facingMode: 'environment' },
+            config,
+            onScanSuccess,
+            onScanError
+          );
+          scanning = true;
+        } catch (err) {
+          scanning = false;
+          btnStop.classList.add('hidden');
+          btnStart.classList.remove('hidden');
+          readerEmpty.classList.remove('hidden');
+          showError(`Couldn't start camera: ${escapeHtml(err.message || String(err))}. Make sure the page is served over HTTPS and that you've granted camera permission.`);
+        }
+      }
+
+      async function stopScanner() {
+        if (!scanner || !scanning) return;
+        try { await scanner.stop(); } catch (_) {}
+        try { await scanner.clear(); } catch (_) {}
+        scanning = false;
+        btnStop.classList.add('hidden');
+        btnStart.classList.remove('hidden');
+        readerEmpty.classList.remove('hidden');
+      }
+
+      // ── Wire up UI ──
+      btnStart.addEventListener('click', startScanner);
+      btnStop.addEventListener('click', stopScanner);
+      btnManual.addEventListener('click', () => {
+        const v = manualInput.value.trim();
+        if (!v) { manualInput.focus(); return; }
+        lookupRegistrant(v);
+      });
+      manualInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') btnManual.click();
+      });
+
+      // Allow ?id=... in the page URL to trigger a lookup immediately (useful for testing).
+      const pageParams = new URLSearchParams(window.location.search);
+      const initialId = pageParams.get('id');
+      if (initialId) lookupRegistrant(initialId);
+    })();
+  </script>
+</body>
+</html>
