@@ -39,13 +39,13 @@
     .app {
       max-width: 520px;
       margin: 0 auto;
-      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
     header {
-      padding: 18px 4px 14px;
+      padding: 10px 2px 8px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -53,20 +53,84 @@
     }
     header h1 {
       margin: 0;
-      font-size: 20px;
+      font-size: 17px;
       letter-spacing: -0.01em;
     }
-    .subtitle { color: var(--muted); font-size: 13px; }
+    .subtitle { color: var(--muted); font-size: 12px; }
 
-    main { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px; }
+    main { flex: 1; display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
 
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 18px;
+      padding: 14px;
     }
-    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+    .card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+
+    /* ── Live event stats (top of app, refreshes on every check-in) ── */
+    .stats-card { padding: 12px 14px; }
+    .stats-event {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .stats-event .stats-event-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+    }
+    .stats-event .stats-event-id {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .stat-cell {
+      text-align: center;
+      padding: 8px 4px;
+      border-radius: 8px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+    }
+    .stat-cell.checked-in { border-color: #14532d; }
+    .stat-cell.members    { border-color: #155e75; }
+    .stat-cell.paid       { border-color: #b45309; }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .stat-cell.checked-in .stat-value { color: #4ade80; }
+    .stat-cell.members .stat-value    { color: #22d3ee; }
+    .stat-cell.paid .stat-value       { color: #fbbf24; }
+
+    .stat-label {
+      font-size: 9px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 3px;
+      font-weight: 600;
+    }
 
     /* Scanner */
     #reader {
@@ -79,11 +143,11 @@
 
     .scanner-empty {
       text-align: center;
-      padding: 28px 12px;
+      padding: 16px 10px;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 13px;
     }
-    .scanner-empty svg { width: 44px; height: 44px; opacity: 0.6; margin-bottom: 10px; }
+    .scanner-empty svg { width: 36px; height: 36px; opacity: 0.6; margin-bottom: 6px; }
 
     /* Buttons */
     .btn {
@@ -92,10 +156,10 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 14px 18px;
+      padding: 12px 16px;
       border-radius: 10px;
       border: none;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       transition: background-color 0.15s ease, transform 0.05s ease;
@@ -119,21 +183,21 @@
     /* Manual entry */
     .manual {
       display: flex;
-      gap: 8px;
-      margin-top: 10px;
+      gap: 6px;
+      margin-top: 8px;
     }
     .manual input {
       flex: 1;
-      padding: 12px 14px;
+      padding: 10px 12px;
       border-radius: 10px;
       border: 1px solid var(--border);
       background: var(--panel-2);
       color: var(--text);
-      font-size: 15px;
+      font-size: 14px;
       outline: none;
     }
     .manual input:focus { border-color: var(--accent); }
-    .manual button { padding: 12px 16px; }
+    .manual button { padding: 10px 14px; }
 
     /* Status messages */
     .alert {
@@ -152,24 +216,25 @@
 
     /* Registrant details */
     .name {
-      margin: 0 0 4px;
-      font-size: 22px;
+      margin: 0 0 2px;
+      font-size: 20px;
       font-weight: 700;
       letter-spacing: -0.01em;
+      line-height: 1.2;
     }
     .email {
       color: var(--muted);
-      font-size: 14px;
-      margin-bottom: 14px;
+      font-size: 13px;
+      margin-bottom: 10px;
       word-break: break-all;
     }
     dl.details {
       margin: 0;
       display: grid;
       grid-template-columns: max-content 1fr;
-      column-gap: 16px;
-      row-gap: 8px;
-      font-size: 14px;
+      column-gap: 14px;
+      row-gap: 6px;
+      font-size: 13px;
     }
     dl.details dt { color: var(--muted); }
     dl.details dd { margin: 0; color: var(--text); }
@@ -191,32 +256,32 @@
     .member-banner {
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 16px 18px;
-      margin: 0 0 16px;
+      gap: 12px;
+      padding: 12px 14px;
+      margin: 0 0 12px;
       border-radius: 12px;
       font-weight: 700;
     }
     .member-banner .mb-icon {
-      width: 40px; height: 40px;
+      width: 32px; height: 32px;
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
       background: rgba(255,255,255,0.18);
     }
-    .member-banner .mb-icon svg { width: 22px; height: 22px; }
+    .member-banner .mb-icon svg { width: 18px; height: 18px; }
     .member-banner .mb-title {
-      font-size: 17px;
+      font-size: 15px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       line-height: 1.15;
     }
     .member-banner .mb-sub {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       opacity: 0.95;
       letter-spacing: 0.01em;
-      margin-top: 2px;
+      margin-top: 1px;
     }
     .member-banner .mb-sub .mono {
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -249,35 +314,35 @@
 
     /* ── Fee picker (non-members only) ───────────────────────────── */
     .fee-block {
-      margin-top: 16px;
-      padding: 14px;
-      border-radius: 12px;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
       background: var(--panel-2);
       border: 1px solid var(--border);
     }
     .fee-block .fee-label {
-      font-size: 12px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--muted);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       font-weight: 600;
     }
     .fee-options {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 6px;
     }
     .fee-opt {
       display: flex; flex-direction: column;
       align-items: stretch; justify-content: center;
-      padding: 12px 10px;
-      border-radius: 10px;
+      padding: 8px 8px;
+      border-radius: 8px;
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--text);
       font-weight: 600;
-      font-size: 14px;
+      font-size: 13px;
       cursor: pointer;
       transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.04s ease;
       text-align: center;
@@ -289,57 +354,57 @@
       border-color: var(--accent);
     }
     .fee-opt .fee-opt-sub {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 500;
       opacity: 0.75;
-      margin-top: 3px;
+      margin-top: 2px;
     }
     .fee-custom {
       display: flex;
       gap: 8px;
-      margin-top: 10px;
+      margin-top: 8px;
       align-items: center;
     }
     .fee-custom label {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--muted);
       flex-shrink: 0;
     }
     .fee-custom input {
       flex: 1;
-      padding: 10px 12px;
+      padding: 8px 10px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--panel);
       color: var(--text);
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       outline: none;
       text-align: right;
     }
     .fee-custom input:focus { border-color: var(--accent); }
-    .fee-custom .fee-aed { color: var(--muted); font-size: 13px; }
+    .fee-custom .fee-aed { color: var(--muted); font-size: 12px; }
     .payment-paid     { background: #dcfce7; color: #14532d; box-shadow: inset 0 0 0 1px #4ade80; }
     .payment-unpaid   { background: #fee2e2; color: #7f1d1d; box-shadow: inset 0 0 0 1px #f87171; }
     .payment-pending  { background: #fef3c7; color: #78350f; box-shadow: inset 0 0 0 1px #fbbf24; }
     .payment-other    { background: #e0e7ff; color: #312e81; box-shadow: inset 0 0 0 1px #818cf8; }
 
-    .actions { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+    .actions { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
 
     .check-banner {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 12px;
+      padding: 8px 12px;
       border-radius: 10px;
       background: var(--success-bg);
       border: 1px solid #14532d;
       color: #bbf7d0;
       font-weight: 600;
-      font-size: 14px;
-      margin-bottom: 12px;
+      font-size: 13px;
+      margin-bottom: 10px;
     }
-    .check-banner svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .check-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
 
     /* Loader */
     .loader {
@@ -356,14 +421,14 @@
     footer {
       text-align: center;
       color: var(--muted);
-      font-size: 12px;
-      padding: 14px 0 22px;
+      font-size: 11px;
+      padding: 8px 0 12px;
     }
     footer code {
       background: var(--panel-2);
-      padding: 1px 6px;
+      padding: 1px 5px;
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 10px;
     }
   </style>
 </head>
@@ -377,6 +442,32 @@
     </header>
 
     <main>
+      <!-- ─── EVENT STATS (loaded once on page load, updated locally) ─── -->
+      <section class="card stats-card hidden" id="stats-card" aria-live="polite">
+        <div class="stats-event">
+          <div class="stats-event-name" id="stat-event-name">—</div>
+          <div class="stats-event-id" id="stat-event-id"></div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-cell">
+            <div class="stat-value" id="stat-total">—</div>
+            <div class="stat-label">Total</div>
+          </div>
+          <div class="stat-cell checked-in">
+            <div class="stat-value" id="stat-checked-in">—</div>
+            <div class="stat-label">Checked&nbsp;In</div>
+          </div>
+          <div class="stat-cell members">
+            <div class="stat-value" id="stat-members">—</div>
+            <div class="stat-label">Members</div>
+          </div>
+          <div class="stat-cell paid">
+            <div class="stat-value" id="stat-paid">—</div>
+            <div class="stat-label">Paid</div>
+          </div>
+        </div>
+      </section>
+
       <!-- ─── SCANNER CARD ─── -->
       <section class="card" id="scanner-card">
         <h2>Scanner</h2>
@@ -469,6 +560,7 @@
       const localCache = new Map();
       let prefetchedEventId = null;
       let prefetching = false;
+      let currentEventInfo = null;  // { eventId, eventName, eventDate }
 
       // ── Helpers ──
       function setStatus(html) {
@@ -662,18 +754,14 @@
           ${memberBanner}
           ${banner}
           ${feeAlreadyBanner}
-          <p class="name">${escapeHtml(fullName)}</p>
+          <div class="name">${escapeHtml(fullName)}</div>
           <div class="email">${escapeHtml(r.email || '')}</div>
 
           <dl class="details">
-            <dt>First Name</dt>      <dd>${escapeHtml(r.firstName || '—')}</dd>
-            <dt>Last Name</dt>       <dd>${escapeHtml(r.lastName || '—')}</dd>
-            <dt>Email</dt>           <dd>${escapeHtml(r.email || '—')}</dd>
-            <dt>Registration Date</dt><dd>${escapeHtml(formatDateTime(r.registrationDate))}</dd>
-            <dt>Payment Date</dt>    <dd>${escapeHtml(formatDateTime(r.paymentDate))}</dd>
+            <dt>Registered</dt>      <dd>${escapeHtml(formatDateTime(r.registrationDate))}</dd>
             <dt>Payment Status</dt>  <dd><span class="payment-pill ${pillClass}">${paymentLabel}</span></dd>
             ${pmiIdRow}
-            <dt>ID</dt>              <dd style="color:var(--muted)">${escapeHtml(r.id || '—')}</dd>
+            <dt>Reg ID</dt>          <dd style="color:var(--muted)">${escapeHtml(r.id || '—')}</dd>
           </dl>
 
           ${feeBlock}
@@ -716,6 +804,16 @@
 
         detailsCard.classList.remove('hidden');
 
+        // Hide the scanner card so the result fills the viewport and the
+        // volunteer doesn't have to scroll past the (now-stopped) camera.
+        // resetView() un-hides it when the user taps Cancel / Scan Next.
+        const scannerCardEl = document.getElementById('scanner-card');
+        if (scannerCardEl) scannerCardEl.classList.add('hidden');
+
+        // Make sure the details card is visible — scroll to top in case
+        // the page was scrolled before this scan.
+        try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (_) {}
+
         // Wire buttons
         const checkinBtn = $('btn-checkin');
         if (checkinBtn) {
@@ -738,6 +836,8 @@
         hideDetails();
         setStatus('');
         manualInput.value = '';
+        const scannerCardEl = document.getElementById('scanner-card');
+        if (scannerCardEl) scannerCardEl.classList.remove('hidden');
       }
 
       // ── Backend ──
@@ -924,6 +1024,7 @@
             if (data.registrant && data.registrant.id != null) {
               localCache.set(String(data.registrant.id), data.registrant);
             }
+            renderStats();   // tick the stats bar
             renderRegistrant(data.registrant, { justCheckedIn: true });
             return;
           }
@@ -932,6 +1033,7 @@
             if (data.registrant && data.registrant.id != null) {
               localCache.set(String(data.registrant.id), data.registrant);
             }
+            renderStats();
             showWarning(`Already checked in at <b>${escapeHtml(formatDateTime(data.previousTime))}</b>. Tap <b>Re-check in anyway</b> to override.`);
             renderRegistrant(data.registrant);
             return;
@@ -1044,6 +1146,79 @@
         });
       }
 
+      // ── Live event stats ───────────────────────────────────────────
+      // The stats card at the top of the app shows totals for the event
+      // currently selected on the Summary tab (cell B3). We fetch the
+      // event + its registrants once on page load, then keep the numbers
+      // in sync locally as check-ins happen — no extra network calls.
+
+      function computeStats(eventId) {
+        const result = { total: 0, checkedIn: 0, members: 0, paid: 0 };
+        if (!eventId) return result;
+        const target = String(eventId);
+        localCache.forEach((r) => {
+          if (String(r.eventId) !== target) return;
+          result.total++;
+          const isCheckedIn = String(r.checkedIn || '').trim().toLowerCase() === 'yes';
+          if (!isCheckedIn) return;
+          result.checkedIn++;
+          const isMember = r.pmiId != null && String(r.pmiId).trim() !== '';
+          const feeAmt = Number(r.feeAmount) || 0;
+          if (isMember) result.members++;
+          else if (feeAmt > 0) result.paid++;
+          // Complimentary check-ins (non-member, fee=0) aren't shown
+          // as their own tile but still count toward "Checked In".
+        });
+        return result;
+      }
+
+      function renderStats() {
+        const card = document.getElementById('stats-card');
+        if (!card) return;
+        if (!currentEventInfo) { card.classList.add('hidden'); return; }
+        const s = computeStats(currentEventInfo.eventId);
+
+        const nameEl = document.getElementById('stat-event-name');
+        const idEl   = document.getElementById('stat-event-id');
+        if (nameEl) nameEl.textContent = currentEventInfo.eventName ||
+          ('Event ' + currentEventInfo.eventId);
+        if (idEl) idEl.textContent = 'ID ' + currentEventInfo.eventId;
+
+        document.getElementById('stat-total').textContent      = s.total;
+        document.getElementById('stat-checked-in').textContent = s.checkedIn;
+        document.getElementById('stat-members').textContent    = s.members;
+        document.getElementById('stat-paid').textContent       = s.paid;
+
+        card.classList.remove('hidden');
+      }
+
+      async function loadCurrentEvent() {
+        if (!BACKEND_URL) return;
+        try {
+          const url = `${BACKEND_URL}?action=current-event`;
+          const data = await callBackend(url, { method: 'GET' });
+          if (!data || !data.ok) {
+            console.warn('current-event:', data && data.error);
+            return;
+          }
+          currentEventInfo = {
+            eventId: data.eventId,
+            eventName: data.eventName,
+            eventDate: data.eventDate,
+          };
+          // Pre-fill the local cache so the very first scan is a cache hit.
+          if (Array.isArray(data.registrants)) {
+            for (const r of data.registrants) {
+              if (r && r.id != null) localCache.set(String(r.id), r);
+            }
+            prefetchedEventId = String(data.eventId);
+          }
+          renderStats();
+        } catch (e) {
+          console.warn('Could not load current event:', e);
+        }
+      }
+
       // ── Pre-warm the backend ───────────────────────────────────────
       // Apps Script Web Apps have a cold-start delay (1–3 s the first
       // time after idle). Firing a ping on page load means the volunteer's
@@ -1052,6 +1227,11 @@
         fetch(`${BACKEND_URL}?action=ping`, { method: 'GET', cache: 'no-store' })
           .catch(() => { /* ignore — non-essential */ });
       }
+
+      // Kick off the stats + cache prefill in parallel with everything
+      // else. If this call fails (older backend, no event picker set),
+      // the app still works normally — first scan triggers prefetch.
+      loadCurrentEvent();
 
       // Allow ?id=... in the page URL to trigger a lookup immediately (useful for testing).
       const pageParams = new URLSearchParams(window.location.search);

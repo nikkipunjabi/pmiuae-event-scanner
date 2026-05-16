@@ -86,6 +86,15 @@ function doGet(e) {
       });
     }
 
+    // Returns the event currently selected in Summary!B3 (the picker)
+    // along with its metadata and every registrant — so the frontend
+    // can render stats and prefill its cache on page load.
+    if (action === 'current-event') {
+      const result = getCurrentEvent_();
+      if (!result) return jsonResponse({ ok: false, error: 'No event currently selected' });
+      return jsonResponse({ ok: true, ...result });
+    }
+
     if (action === 'ping') {
       // Pre-warm: touching the sheet here means the next real read is hot.
       try { getSheet_().getRange('A1').getValue(); } catch (_) {}
@@ -98,8 +107,8 @@ function doGet(e) {
     if (action === 'version') {
       return jsonResponse({
         ok: true,
-        version: 'v3-fee-support-2026-05-15',
-        features: ['lookup', 'event-bulk', 'cache', 'pmi-id', 'fee-record'],
+        version: 'v4-current-event-2026-05-15',
+        features: ['lookup', 'event-bulk', 'cache', 'pmi-id', 'fee-record', 'current-event'],
       });
     }
 
@@ -216,6 +225,62 @@ function findRegistrant(id) {
     }
   }
   return null;
+}
+
+/**
+ * Resolve the "currently selected" event for the scanner. We trust
+ * Summary!B3 (the picker on the Summary tab) as the source of truth —
+ * the volunteer sets that to tonight's event ID before opening the app.
+ *
+ * If the Summary tab doesn't exist or B3 is empty, we fall back to the
+ * most common event ID in Sheet1 (usually the active event).
+ *
+ * Returns { eventId, eventName, eventDate, registrants[], count } or null.
+ */
+function getCurrentEvent_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+
+  // 1. Try the Summary picker
+  let eventId = null;
+  const summary = ss.getSheetByName(SUMMARY_TAB_NAME);
+  if (summary) {
+    try {
+      const v = summary.getRange('B3').getValue();
+      if (v !== '' && v != null) eventId = String(v).trim();
+    } catch (_) {}
+  }
+
+  // 2. Fall back to the most-common event ID in Sheet1
+  const all = readAllRows_();
+  if (!eventId) {
+    const counts = {};
+    for (let i = 0; i < all.length; i++) {
+      const eid = String(all[i][COL.EVENT_ID - 1] || '').trim();
+      if (eid) counts[eid] = (counts[eid] || 0) + 1;
+    }
+    let best = '', bestCount = 0;
+    for (const eid in counts) {
+      if (counts[eid] > bestCount) { best = eid; bestCount = counts[eid]; }
+    }
+    eventId = best;
+  }
+  if (!eventId) return null;
+
+  // 3. Collect registrants and pluck event name / date from the first row
+  const registrants = getEventRegistrants(eventId);
+  let eventName = '', eventDate = '';
+  if (registrants.length > 0) {
+    eventName = registrants[0].event || '';
+    eventDate = registrants[0].eventDate || '';
+  }
+
+  return {
+    eventId: eventId,
+    eventName: eventName,
+    eventDate: eventDate,
+    registrants: registrants,
+    count: registrants.length,
+  };
 }
 
 /**
