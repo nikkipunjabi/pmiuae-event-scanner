@@ -132,6 +132,39 @@
       font-weight: 600;
     }
 
+    /* Loading state: shown while current-event is in flight */
+    .stats-card.loading .stat-value {
+      color: var(--muted);
+      animation: stats-pulse 1.2s ease-in-out infinite;
+    }
+    .stats-card.loading .stat-cell { opacity: 0.7; }
+    .stats-card.loading .stat-cell.checked-in,
+    .stats-card.loading .stat-cell.members,
+    .stats-card.loading .stat-cell.paid {
+      /* mute the accent borders while loading */
+      border-color: var(--border);
+    }
+    @keyframes stats-pulse {
+      0%, 100% { opacity: 0.5; }
+      50%      { opacity: 1; }
+    }
+    .stats-loading-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-style: normal;
+    }
+    .stats-loading-label .mini-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255,255,255,0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
     /* Scanner */
     #reader {
       width: 100%;
@@ -443,9 +476,14 @@
 
     <main>
       <!-- ─── EVENT STATS (loaded once on page load, updated locally) ─── -->
-      <section class="card stats-card hidden" id="stats-card" aria-live="polite">
+      <section class="card stats-card loading" id="stats-card" aria-live="polite">
         <div class="stats-event">
-          <div class="stats-event-name" id="stat-event-name">—</div>
+          <div class="stats-event-name" id="stat-event-name">
+            <span class="stats-loading-label">
+              <span class="mini-spinner" aria-hidden="true"></span>
+              Loading event stats…
+            </span>
+          </div>
           <div class="stats-event-id" id="stat-event-id"></div>
         </div>
         <div class="stats-grid">
@@ -1189,16 +1227,25 @@
         document.getElementById('stat-members').textContent    = s.members;
         document.getElementById('stat-paid').textContent       = s.paid;
 
-        card.classList.remove('hidden');
+        // Swap out of the loading state once real numbers are in place
+        card.classList.remove('hidden', 'loading');
       }
 
       async function loadCurrentEvent() {
-        if (!BACKEND_URL) return;
+        const card = document.getElementById('stats-card');
+        if (!BACKEND_URL) {
+          if (card) card.classList.add('hidden');
+          return;
+        }
+        // Card already starts in `.loading` state from the HTML, so the
+        // spinner is visible the moment the page paints. We just need to
+        // either populate it or hide it depending on the response.
         try {
           const url = `${BACKEND_URL}?action=current-event`;
           const data = await callBackend(url, { method: 'GET' });
           if (!data || !data.ok) {
             console.warn('current-event:', data && data.error);
+            if (card) card.classList.add('hidden');
             return;
           }
           currentEventInfo = {
@@ -1216,6 +1263,7 @@
           renderStats();
         } catch (e) {
           console.warn('Could not load current event:', e);
+          if (card) card.classList.add('hidden');
         }
       }
 
