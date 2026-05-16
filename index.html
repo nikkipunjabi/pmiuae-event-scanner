@@ -96,9 +96,12 @@
       letter-spacing: 0.06em;
       flex-shrink: 0;
     }
+    /* 6-column grid lets us split tiles asymmetrically:
+       Row 1: TOTAL (3 cols) | CHECKED IN (3 cols)
+       Row 2: PMI MEMBERS (2 cols) | PAID (2 cols) | GUESTS (2 cols) */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 6px;
     }
     .stat-cell {
@@ -108,9 +111,11 @@
       background: var(--panel-2);
       border: 1px solid var(--border);
     }
-    .stat-cell.checked-in { border-color: #14532d; }
-    .stat-cell.members    { border-color: #155e75; }
-    .stat-cell.paid       { border-color: #b45309; }
+    .stat-cell.total      { grid-column: span 3; }
+    .stat-cell.checked-in { grid-column: span 3; border-color: #14532d; }
+    .stat-cell.members    { grid-column: span 2; border-color: #155e75; }
+    .stat-cell.paid       { grid-column: span 2; border-color: #b45309; }
+    .stat-cell.guests     { grid-column: span 2; border-color: #6d28d9; }
 
     .stat-value {
       font-size: 22px;
@@ -122,6 +127,12 @@
     .stat-cell.checked-in .stat-value { color: #4ade80; }
     .stat-cell.members .stat-value    { color: #22d3ee; }
     .stat-cell.paid .stat-value       { color: #fbbf24; }
+    .stat-cell.guests .stat-value     { color: #c4b5fd; }
+    /* Second-row values are slightly smaller so the breakdown reads as
+       a sub-tier of the headline numbers above. */
+    .stat-cell.members .stat-value,
+    .stat-cell.paid .stat-value,
+    .stat-cell.guests .stat-value { font-size: 18px; }
 
     .stat-label {
       font-size: 9px;
@@ -140,7 +151,8 @@
     .stats-card.loading .stat-cell { opacity: 0.7; }
     .stats-card.loading .stat-cell.checked-in,
     .stats-card.loading .stat-cell.members,
-    .stats-card.loading .stat-cell.paid {
+    .stats-card.loading .stat-cell.paid,
+    .stats-card.loading .stat-cell.guests {
       /* mute the accent borders while loading */
       border-color: var(--border);
     }
@@ -487,7 +499,8 @@
           <div class="stats-event-id" id="stat-event-id"></div>
         </div>
         <div class="stats-grid">
-          <div class="stat-cell">
+          <!-- Row 1: headline numbers -->
+          <div class="stat-cell total">
             <div class="stat-value" id="stat-total">—</div>
             <div class="stat-label">Total</div>
           </div>
@@ -495,13 +508,18 @@
             <div class="stat-value" id="stat-checked-in">—</div>
             <div class="stat-label">Checked&nbsp;In</div>
           </div>
+          <!-- Row 2: breakdown of checked-in -->
           <div class="stat-cell members">
             <div class="stat-value" id="stat-members">—</div>
-            <div class="stat-label">Members</div>
+            <div class="stat-label">PMI&nbsp;Members</div>
           </div>
           <div class="stat-cell paid">
             <div class="stat-value" id="stat-paid">—</div>
             <div class="stat-label">Paid</div>
+          </div>
+          <div class="stat-cell guests" title="Complimentary (non-member, no fee)">
+            <div class="stat-value" id="stat-guests">—</div>
+            <div class="stat-label">Guests</div>
           </div>
         </div>
       </section>
@@ -1191,7 +1209,7 @@
       // in sync locally as check-ins happen — no extra network calls.
 
       function computeStats(eventId) {
-        const result = { total: 0, checkedIn: 0, members: 0, paid: 0 };
+        const result = { total: 0, checkedIn: 0, members: 0, paid: 0, guests: 0 };
         if (!eventId) return result;
         const target = String(eventId);
         localCache.forEach((r) => {
@@ -1201,11 +1219,14 @@
           if (!isCheckedIn) return;
           result.checkedIn++;
           const isMember = r.pmiId != null && String(r.pmiId).trim() !== '';
-          const feeAmt = Number(r.feeAmount) || 0;
+          const feeAmt   = Number(r.feeAmount) || 0;
+          const feeRecorded = r.feeTime != null && String(r.feeTime).trim() !== '';
           if (isMember) result.members++;
           else if (feeAmt > 0) result.paid++;
-          // Complimentary check-ins (non-member, fee=0) aren't shown
-          // as their own tile but still count toward "Checked In".
+          else if (feeRecorded) result.guests++;
+          // A non-member who's checked in but has no fee record at all
+          // counts toward "Checked In" but none of the breakdown tiles
+          // — that's intentional, it flags a missed fee entry.
         });
         return result;
       }
@@ -1226,6 +1247,7 @@
         document.getElementById('stat-checked-in').textContent = s.checkedIn;
         document.getElementById('stat-members').textContent    = s.members;
         document.getElementById('stat-paid').textContent       = s.paid;
+        document.getElementById('stat-guests').textContent     = s.guests;
 
         // Swap out of the loading state once real numbers are in place
         card.classList.remove('hidden', 'loading');
